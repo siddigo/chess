@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["gru1"],
+  "buildCommand": "npm run build",
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/handler?path=:path*" },
+    { "source": "/game/:id", "destination": "/game.html" },
+    { "source": "/replay/:id", "destination": "/replay.html" },
+    { "source": "/history", "destination": "/history.html" }
+  ]
+}

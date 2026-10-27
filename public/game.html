@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Partida · Xadrez às Cegas</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="logo" href="/">♞ Xadrez às Cegas</a>
+    <nav><a href="/">Jogar</a><a href="/history">Histórico</a></nav>
+  </header>
+
+  <main>
+    <!-- Entrar na partida -->
+    <section id="join" class="card hidden" style="max-width:560px;margin:0 auto">
+      <h2>Você foi desafiado!</h2>
+      <p id="join-info" class="muted"></p>
+      <form id="join-form">
+        <label><span>Seu nome</span><input type="text" name="name" maxlength="24" required></label>
+        <label><span>Seu nível de visualização (não pode ser alterado depois)</span></label>
+        <div class="levels" id="join-levels"></div>
+        <button class="primary" type="submit" style="width:100%;margin-top:16px">Aceitar desafio</button>
+      </form>
+    </section>
+
+    <!-- Esperando oponente -->
+    <section id="waiting" class="card hidden" style="max-width:560px;margin:0 auto">
+      <h2>Aguardando oponente…</h2>
+      <p class="muted">Mande este link para o seu amigo (ele precisa estar na mesma rede, ou acessar pelo endereço que o servidor mostrou ao iniciar):</p>
+      <div class="share">
+        <input type="text" id="share-link" readonly>
+        <button id="copy-link">Copiar</button>
+      </div>
+      <p id="waiting-info" class="muted" style="margin-top:14px"></p>
+      <button id="cancel" class="danger small">Cancelar desafio</button>
+    </section>
+
+    <!-- Partida -->
+    <section id="game" class="game-layout hidden">
+      <div>
+        <div class="player-bar" id="bar-top"></div>
+        <div id="board"></div>
+        <div class="player-bar" id="bar-bottom"></div>
+      </div>
+
+      <aside class="side">
+        <div class="panel">
+          <div class="last-move" id="last-move"></div>
+        </div>
+        <div class="panel">
+          <div class="status-msg" id="status"></div>
+          <div id="draw-offer" class="draw-offer hidden" style="margin-top:10px">
+            <div style="margin-bottom:8px">Seu oponente propõe empate</div>
+            <div class="actions"><button class="primary" id="accept-draw">Aceitar</button><button id="decline-draw">Recusar</button></div>
+          </div>
+          <div class="actions" id="play-actions" style="margin-top:10px">
+            <button id="btn-abort">Abortar</button>
+            <button id="btn-draw">½ Empate</button>
+            <button id="btn-resign">⚑ Abandonar</button>
+          </div>
+          <div class="actions hidden" id="end-actions" style="margin-top:10px">
+            <a class="btn" id="btn-replay">Revisar partida</a>
+            <a class="btn primary" href="/">Nova partida</a>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="moves" id="moves"></div>
+        </div>
+        <div class="panel">
+          <label class="toggle"><input type="checkbox" id="opt-legal"> Mostrar lances possíveis</label>
+          <label class="toggle"><input type="checkbox" id="opt-pt"> Notação em português (C, B, T, D, R)</label>
+          <label class="toggle"><input type="checkbox" id="opt-reveal"> Revelar peças ao fim da partida</label>
+          <label class="toggle hidden" id="spectator-level-wrap">Nível (espectador)
+            <select id="spectator-level" style="width:auto;margin-left:auto"></select></label>
+          <button class="small" id="btn-flip" style="margin-top:6px">⇅ Girar tabuleiro</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script src="/config.js"></script>
+  <script src="/vendor/supabase.js"></script>
+  <script type="module">
+    import { Chess } from '/vendor/chess.js';
+    import { Board, LEVEL_NAMES, appearance, formatSan, getPref, setPref, resultText, formatClock, timeControlText, escapeHtml } from '/board.js';
+    import { api, getSeat, saveSeat, subscribeGame } from '/net.js';
+
+    const gameId = location.pathname.split('/').pop();
+    const $ = (id) => document.getElementById(id);
+
+    let state = null;
+    let seat = getSeat(gameId)?.color ?? null;
+    const token = () => getSeat(gameId)?.token;
+    let receivedAt = 0;
+    // Momento (local) em que começou a minha vez; enviado ao servidor para a compensação de lag.
+    let turnStartedAt = 0;
+    let turnStartedPly = -1;
+    let chess = new Chess();
+    let selected = null;
+    let orientation = null;
+    let spectatorLevel = 0;
+
+    const prefs = {
+      legal: getPref('showLegal', true),
+      pt: getPref('notationPt', false),
+      reveal: getPref('revealAtEnd', true),
+    };
+    $('opt-legal').checked = prefs.legal;
+    $('opt-pt').checked = prefs.pt;
+    $('opt-reveal').checked = prefs.reveal;
+    $('opt-legal').onchange = (e) => { prefs.legal = e.target.checked; setPref('showLegal', prefs.legal); render(); };
+    $('opt-pt').onchange = (e) => { prefs.pt = e.target.checked; setPref('notationPt', prefs.pt); render(); };
+    $('opt-reveal').onchange = (e) => { prefs.reveal = e.target.checked; setPref('revealAtEnd', prefs.reveal); render(); };
+    $('spectator-level').innerHTML = LEVEL_NAMES.map((n, i) => `<option value="${i}">${i} · ${n}</option>`).join('');
+    $('spectator-level').onchange = (e) => { spectatorLevel = Number(e.target.value); render(); };
+    $('btn-flip').onclick = () => { orientation = orientation === 'w' ? 'b' : 'w'; board.setOrientation(orientation); render(); };
+
+    function toast(msg) {
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 2500);
+    }
+
+    // ------------------------------------------------------------ estado
+
+    function setState(s) {
+      // Realtime e respostas HTTP podem chegar fora de ordem: ignora versões antigas.
+      if (state && s.version < state.version) return;
+      const prevPly = state?.moves.length ?? -1;
+      state = s;
+      receivedAt = Date.now();
+      if (s.status === 'playing' && seat && s.turn === seat && s.moves.length !== turnStartedPly) {
+        turnStartedPly = s.moves.length;
+        turnStartedAt = Date.now();
+      }
+      syncChess();
+      if (state.moves.length !== prevPly) selected = null;
+      show();
+    }
+
+    function onError(err) {
+      toast(err.message);
+      pendingVersion = null;
+      api('games/' + gameId).then(setState).catch(() => {});
+      syncChess();
+      render();
+    }
+
+    const post = (path, body = {}) =>
+      api(`games/${gameId}/${path}`, { method: 'POST', body: { token: token(), ...body } }).then(setState, onError);
+
+    subscribeGame(gameId, setState);
+    api('games/' + gameId).then(setState, (err) => {
+      document.querySelector('main').innerHTML = `<div class="card">${escapeHtml(err.message)}. <a href="/">Voltar</a></div>`;
+    });
+
+    // Versão da partida no momento em que enviei um lance ainda não confirmado.
+    let pendingVersion = null;
+
+    function syncChess() {
+      if (!state) return;
+      // Mantém o lance otimista até chegar uma versão mais nova do servidor.
+      if (pendingVersion !== null && state.version <= pendingVersion) return;
+      // Reconstrói a partir dos lances (e não do FEN) para ter o histórico.
+      chess = new Chess();
+      for (const m of state.moves) chess.move({ from: m.from, to: m.to, promotion: m.promotion });
+    }
+
+    // ------------------------------------------------------------ telas
+
+    function show() {
+      const s = state;
+      $('join').classList.add('hidden');
+      $('waiting').classList.add('hidden');
+      $('game').classList.add('hidden');
+
+      if (s.status === 'cancelled') {
+        document.querySelector('main').innerHTML = '<div class="card">Este desafio foi cancelado. <a href="/">Voltar</a></div>';
+        return;
+      }
+      if (s.status === 'waiting') {
+        if (seat) {
+          $('waiting').classList.remove('hidden');
+          $('share-link').value = location.href;
+          const me = s.white ?? s.black;
+          $('waiting-info').innerHTML = `Você joga de <b>${s.white ? 'brancas' : 'pretas'}</b> no nível <b>${me.level}</b> (${LEVEL_NAMES[me.level]}) · ${timeControlText(s.timeControl)}`;
+        } else {
+          showJoin();
+        }
+        return;
+      }
+
+      $('game').classList.remove('hidden');
+      if (!orientation) {
+        orientation = seat ?? 'w';
+        board.setOrientation(orientation);
+      }
+      $('spectator-level-wrap').classList.toggle('hidden', !!seat);
+      render();
+    }
+
+    function showJoin() {
+      const s = state;
+      const host = s.white ?? s.black;
+      $('join').classList.remove('hidden');
+      $('join-info').innerHTML = `<b>${escapeHtml(host.name)}</b> (nível ${host.level}) joga de ${s.white ? 'brancas' : 'pretas'}. Você jogará de <b>${s.white ? 'pretas' : 'brancas'}</b>. Ritmo: ${timeControlText(s.timeControl)}.`;
+      const form = $('join-form');
+      if (!form.name.value) form.name.value = getPref('name', '');
+      if (!$('join-levels').innerHTML) {
+        const saved = getPref('level', 0);
+        $('join-levels').innerHTML = LEVEL_NAMES.map((n, i) => `
+          <label><input type="radio" name="level" value="${i}" ${i === saved ? 'checked' : ''}>
+            <b>${i}</b><small>${n}</small></label>`).join('');
+      }
+    }
+
+    $('join-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const level = Number(form.level.value);
+      setPref('name', form.name.value.trim());
+      setPref('level', level);
+      const btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      try {
+        const data = await api(`games/${gameId}/join`, { method: 'POST', body: { name: form.name.value, level } });
+        saveSeat(gameId, data.token, data.color);
+        seat = data.color;
+        setState(data.game);
+      } catch (err) {
+        toast(err.message);
+        btn.disabled = false;
+      }
+    });
+
+    $('copy-link').onclick = async () => {
+      $('share-link').select();
+      try { await navigator.clipboard.writeText(location.href); } catch { document.execCommand('copy'); }
+      $('copy-link').textContent = 'Copiado!';
+    };
+    $('cancel').onclick = () => post('action', { type: 'cancel' });
+
+    // ------------------------------------------------------------ tabuleiro
+
+    const board = new Board($('board'), {
+      onSquareDown(sq) {
+        if (!canMove()) return;
+        if (selected && tryMove(selected, sq)) return;
+        const p = chess.get(sq);
+        selected = p && p.color === seat && selected !== sq ? sq : null;
+        render();
+      },
+      onDrop(from, to) {
+        if (canMove()) tryMove(from, to);
+      },
+    });
+
+    function canMove() {
+      return state?.status === 'playing' && seat && chess.turn() === seat;
+    }
+
+    function viewLevel() {
+      if (state.status === 'finished' && prefs.reveal) return 0;
+      if (seat) return state[seat === 'w' ? 'white' : 'black'].level;
+      return spectatorLevel;
+    }
+
+    function tryMove(from, to) {
+      const candidates = chess.moves({ square: from, verbose: true }).filter((m) => m.to === to);
+      if (!candidates.length) return false;
+      selected = null;
+      if (candidates.some((m) => m.promotion)) {
+        askPromotion(seat).then((promotion) => {
+          if (promotion) sendMove(from, to, promotion);
+          else render();
+        });
+      } else {
+        sendMove(from, to);
+      }
+      return true;
+    }
+
+    function sendMove(from, to, promotion) {
+      chess.move({ from, to, promotion }); // otimista; o servidor confirma em seguida
+      lastLocalMove = { from, to };
+      pendingVersion = state.version;
+      render();
+      post('move', { from, to, promotion, elapsed: Date.now() - turnStartedAt }).finally(() => (pendingVersion = null));
+    }
+    let lastLocalMove = null;
+
+    function askPromotion(color) {
+      return new Promise((resolve) => {
+        const bg = document.createElement('div');
+        bg.className = 'modal-bg';
+        bg.innerHTML = `<div class="modal"><h3>Promover para</h3><div class="promo">${['q', 'r', 'b', 'n']
+          .map((t) => `<button data-t="${t}"><img src="/pieces/${color}${t.toUpperCase()}.svg" alt="${t}"></button>`)
+          .join('')}</div></div>`;
+        bg.addEventListener('click', (e) => {
+          const b = e.target.closest('button');
+          if (b || e.target === bg) {
+            bg.remove();
+            resolve(b?.dataset.t ?? null);
+          }
+        });
+        document.body.appendChild(bg);
+      });
+    }
+
+    // ------------------------------------------------------------ render
+
+    function render() {
+      if (!state || state.status === 'waiting') return;
+      const level = viewLevel();
+      const history = chess.history({ verbose: true });
+      const serverLast = state.moves[state.moves.length - 1];
+      const lastMove = history.length > state.moves.length ? lastLocalMove : serverLast;
+
+      let checkSquare = null;
+      if (chess.inCheck() && appearance('k', level) === 'sprite') {
+        checkSquare = chess.board().flat().find((p) => p && p.type === 'k' && p.color === chess.turn())?.square;
+      }
+
+      const targets = selected && prefs.legal
+        ? chess.moves({ square: selected, verbose: true }).map((m) => ({ to: m.to, capture: !!m.captured }))
+        : [];
+
+      board.render({ board: chess.board(), level, lastMove, selected, targets, checkSquare });
+      renderBars();
+      renderMoves();
+      renderStatus();
+    }
+
+    function renderBars() {
+      const bottom = orientation;
+      const top = bottom === 'w' ? 'b' : 'w';
+      for (const [color, id] of [[top, 'bar-top'], [bottom, 'bar-bottom']]) {
+        const p = state[color === 'w' ? 'white' : 'black'];
+        $(id).innerHTML = `
+          <div><span class="dot ${color}"></span><span class="name">${escapeHtml(p.name)}</span>
+            ${seat === color ? '<span class="muted"> (você)</span>' : ''}
+            <div class="lvl">Nível ${p.level} · ${LEVEL_NAMES[p.level]}</div></div>
+          ${state.timeControl ? `<div class="clock" data-color="${color}"></div>` : ''}`;
+      }
+      tickClocks();
+    }
+
+    function clockMs(color) {
+      let ms = state.clocks[color];
+      if (state.clockRunning && state.turn === color) ms -= Date.now() - receivedAt;
+      return Math.max(0, ms);
+    }
+
+    // Não há timer no servidor: quando um relógio zera, qualquer cliente avisa e o servidor confere.
+    let lastFlagCall = 0;
+    function maybeFlag() {
+      if (state.status !== 'playing' || !state.clockRunning || clockMs(state.turn) > 0) return;
+      if (Date.now() - lastFlagCall < 1000) return;
+      lastFlagCall = Date.now();
+      api(`games/${gameId}/flag`, { method: 'POST' }).then(setState, () => {});
+    }
+
+    function tickClocks() {
+      if (!state?.timeControl) return;
+      maybeFlag();
+      document.querySelectorAll('.clock').forEach((el) => {
+        const c = el.dataset.color;
+        const ms = clockMs(c);
+        el.textContent = formatClock(ms);
+        el.classList.toggle('active', state.status === 'playing' && state.turn === c);
+        el.classList.toggle('low', ms < 20_000);
+      });
+    }
+    setInterval(tickClocks, 100);
+
+    function renderMoves() {
+      const lang = prefs.pt ? 'pt' : 'en';
+      const sans = chess.history();
+      let html = '';
+      for (let i = 0; i < sans.length; i += 2) {
+        html += `<div class="num">${i / 2 + 1}.</div>`;
+        html += `<div class="mv ${i === sans.length - 1 ? 'current' : ''}">${formatSan(sans[i], lang)}</div>`;
+        html += `<div class="mv ${i + 1 === sans.length - 1 ? 'current' : ''}">${sans[i + 1] ? formatSan(sans[i + 1], lang) : ''}</div>`;
+      }
+      const el = $('moves');
+      el.innerHTML = html;
+      el.scrollTop = el.scrollHeight;
+
+      const n = sans.length;
+      $('last-move').innerHTML = n
+        ? `<small>último lance</small>${Math.ceil(n / 2)}.${n % 2 === 0 ? '..' : ''} ${formatSan(sans[n - 1], lang)}`
+        : '<small>último lance</small>—';
+    }
+
+    function renderStatus() {
+      const s = state;
+      const playing = s.status === 'playing';
+      $('play-actions').classList.toggle('hidden', !playing || !seat);
+      $('end-actions').classList.toggle('hidden', playing);
+      $('btn-replay').href = '/replay/' + s.id;
+      $('btn-abort').classList.toggle('hidden', s.moves.length >= 2);
+      $('btn-draw').disabled = s.drawOffer === seat;
+      $('btn-draw').textContent = s.drawOffer === seat ? 'Empate proposto' : '½ Empate';
+      $('draw-offer').classList.toggle('hidden', !(playing && seat && s.drawOffer && s.drawOffer !== seat));
+
+      const statusEl = $('status');
+      if (playing) {
+        statusEl.className = 'status-msg';
+        const turnName = s[s.turn === 'w' ? 'white' : 'black'].name;
+        statusEl.textContent = seat ? (s.turn === seat ? 'Sua vez' : `Vez de ${turnName}`) : `Vez de ${turnName}`;
+      } else {
+        statusEl.className = 'status-msg big';
+        let headline = 'Partida encerrada';
+        if (s.result === '1/2-1/2') headline = 'Empate';
+        else if (s.result === '1-0' || s.result === '0-1') {
+          const winner = s.result === '1-0' ? 'w' : 'b';
+          headline = seat ? (seat === winner ? 'Você venceu! 🎉' : 'Você perdeu') : `${s[winner === 'w' ? 'white' : 'black'].name} venceu`;
+        }
+        statusEl.innerHTML = `${headline} <span class="muted">${resultText(s.result)}</span><div class="muted" style="font-size:13px;font-weight:400">${escapeHtml(s.termination ?? '')}</div>`;
+      }
+    }
+
+    const act = (type) => post('action', { type });
+    $('btn-resign').onclick = () => confirm('Abandonar a partida?') && act('resign');
+    $('btn-abort').onclick = () => confirm('Abortar a partida?') && act('abort');
+    $('btn-draw').onclick = () => act('offer-draw');
+    $('accept-draw').onclick = () => act('accept-draw');
+    $('decline-draw').onclick = () => act('decline-draw');
+  </script>
+</body>
+</html>

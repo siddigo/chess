@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Revisão · Xadrez às Cegas</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="replay">
+  <header class="top">
+    <a class="logo" href="/">♞ Xadrez às Cegas</a>
+    <nav><a href="/">Jogar</a><a href="/history">Histórico</a></nav>
+  </header>
+
+  <main>
+    <section class="game-layout">
+      <div>
+        <div class="player-bar" id="bar-top"></div>
+        <div id="board"></div>
+        <div class="player-bar" id="bar-bottom"></div>
+        <div class="actions" style="margin-top:8px">
+          <button id="first">⏮</button><button id="prev">◀</button><button id="next">▶</button><button id="last">⏭</button>
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="panel">
+          <div class="status-msg big" id="result"></div>
+          <div class="muted" id="meta" style="text-align:center;font-size:13px"></div>
+        </div>
+        <div class="panel"><div class="moves" id="moves" style="max-height:360px"></div></div>
+        <div class="panel">
+          <label class="toggle">Ver no nível
+            <select id="level" style="width:auto;margin-left:auto"></select></label>
+          <label class="toggle"><input type="checkbox" id="opt-pt"> Notação em português</label>
+          <div class="actions" style="margin-top:8px">
+            <button class="small" id="flip">⇅ Girar</button>
+            <button class="small" id="copy">Copiar PGN</button>
+            <a class="btn small" id="download">Baixar PGN</a>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script type="module">
+    import { Chess } from '/vendor/chess.js';
+    import { Board, LEVEL_NAMES, formatSan, getPref, setPref, resultText, timeControlText, escapeHtml } from '/board.js';
+    import { api } from '/net.js';
+
+    const $ = (id) => document.getElementById(id);
+    const gameId = location.pathname.split('/').pop();
+    let game;
+    try {
+      game = await api('games/' + gameId);
+    } catch (err) {
+      document.querySelector('main').innerHTML = `<div class="card">${escapeHtml(err.message)}. <a href="/history">Voltar</a></div>`;
+      throw err;
+    }
+
+    // Pré-calcula as posições de cada lance.
+    const chess = new Chess();
+    const positions = [chess.board()];
+    for (const m of game.moves) {
+      chess.move({ from: m.from, to: m.to, promotion: m.promotion });
+      positions.push(chess.board());
+    }
+
+    let ply = game.moves.length;
+    let level = Math.max(0, Math.min(5, Number(new URLSearchParams(location.search).get('level')) || 0));
+    let orientation = 'w';
+    let pt = getPref('notationPt', false);
+
+    const board = new Board($('board'));
+
+    $('level').innerHTML = LEVEL_NAMES.map((n, i) => `<option value="${i}">${i} · ${n}</option>`).join('');
+    $('level').value = level;
+    $('level').onchange = (e) => { level = Number(e.target.value); render(); };
+    $('opt-pt').checked = pt;
+    $('opt-pt').onchange = (e) => { pt = e.target.checked; setPref('notationPt', pt); render(); };
+    $('flip').onclick = () => { orientation = orientation === 'w' ? 'b' : 'w'; board.setOrientation(orientation); render(); };
+    $('download').href = `/api/games/${gameId}/pgn?download`;
+    $('copy').onclick = async () => {
+      const pgn = await (await fetch(`/api/games/${gameId}/pgn`)).text();
+      await navigator.clipboard.writeText(pgn);
+      $('copy').textContent = 'Copiado!';
+    };
+
+    const go = (p) => { ply = Math.max(0, Math.min(game.moves.length, p)); render(); };
+    $('first').onclick = () => go(0);
+    $('prev').onclick = () => go(ply - 1);
+    $('next').onclick = () => go(ply + 1);
+    $('last').onclick = () => go(game.moves.length);
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'SELECT') return;
+      if (e.key === 'ArrowLeft') go(ply - 1);
+      if (e.key === 'ArrowRight') go(ply + 1);
+      if (e.key === 'ArrowUp' || e.key === 'Home') { e.preventDefault(); go(0); }
+      if (e.key === 'ArrowDown' || e.key === 'End') { e.preventDefault(); go(game.moves.length); }
+    });
+
+    const d = new Date(game.startedAt ?? game.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    $('result').textContent = resultText(game.result) || 'Em andamento';
+    $('meta').innerHTML = `${escapeHtml(game.termination ?? '')}<br>${d} · ${timeControlText(game.timeControl)}`;
+
+    function render() {
+      const lastMove = ply > 0 ? game.moves[ply - 1] : null;
+      board.render({ board: positions[ply], level, lastMove });
+
+      const bottom = orientation, top = bottom === 'w' ? 'b' : 'w';
+      for (const [color, id] of [[top, 'bar-top'], [bottom, 'bar-bottom']]) {
+        const p = game[color === 'w' ? 'white' : 'black'];
+        $(id).innerHTML = `<div><span class="dot ${color}"></span><span class="name">${escapeHtml(p?.name ?? '?')}</span>
+          <div class="lvl">Jogou no nível ${p?.level ?? '?'} · ${LEVEL_NAMES[p?.level] ?? ''}</div></div>`;
+      }
+
+      const lang = pt ? 'pt' : 'en';
+      let html = '';
+      game.moves.forEach((m, i) => {
+        if (i % 2 === 0) html += `<div class="num">${i / 2 + 1}.</div>`;
+        html += `<div class="mv ${i + 1 === ply ? 'current' : ''}" data-ply="${i + 1}">${formatSan(m.san, lang)}</div>`;
+      });
+      if (game.moves.length % 2 === 1) html += '<div></div>';
+      $('moves').innerHTML = html;
+      $('moves').querySelectorAll('[data-ply]').forEach((el) => (el.onclick = () => go(Number(el.dataset.ply))));
+      $('moves').querySelector('.current')?.scrollIntoView({ block: 'nearest' });
+    }
+
+    render();
+  </script>
+</body>
+</html>

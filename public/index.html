@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Xadrez às Cegas</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="logo" href="/">♞ Xadrez às Cegas</a>
+    <nav><a href="/" class="active">Jogar</a><a href="/history">Histórico</a></nav>
+  </header>
+
+  <main>
+    <div class="row" style="align-items:flex-start">
+      <section class="card" style="flex:2 1 420px">
+        <h2>Criar desafio</h2>
+        <form id="create">
+          <label><span>Seu nome</span><input type="text" name="name" maxlength="24" required></label>
+
+          <label><span>Seu nível de visualização (não pode ser alterado depois)</span></label>
+          <div class="levels" id="levels"></div>
+
+          <div class="row" style="margin-top:16px">
+            <label><span>Jogar de</span>
+              <select name="color">
+                <option value="random">Aleatório</option>
+                <option value="white">Brancas</option>
+                <option value="black">Pretas</option>
+              </select>
+            </label>
+            <label><span>Ritmo</span>
+              <select name="tc">
+                <option value="">Sem relógio</option>
+                <option value="1+0">1+0</option>
+                <option value="3+0">3+0</option>
+                <option value="3+2">3+2</option>
+                <option value="5+0">5+0</option>
+                <option value="5+3">5+3</option>
+                <option value="10+0" selected>10+0</option>
+                <option value="10+5">10+5</option>
+                <option value="15+10">15+10</option>
+                <option value="30+0">30+0</option>
+                <option value="custom">Personalizado…</option>
+              </select>
+            </label>
+          </div>
+          <div class="row hidden" id="custom-tc">
+            <label><span>Minutos</span><input type="number" name="minutes" min="0.5" max="180" step="0.5" value="10"></label>
+            <label><span>Incremento (s)</span><input type="number" name="increment" min="0" max="60" value="0"></label>
+          </div>
+          <button class="primary" type="submit" style="width:100%;margin-top:6px">Criar partida</button>
+        </form>
+      </section>
+
+      <section style="flex:1 1 300px">
+        <div class="card">
+          <h2>Aguardando oponente</h2>
+          <div id="open" class="muted">Carregando…</div>
+        </div>
+        <div class="card">
+          <h2>Em andamento</h2>
+          <div id="playing" class="muted">Carregando…</div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/config.js"></script>
+  <script src="/vendor/supabase.js"></script>
+  <script type="module">
+    import { LEVEL_NAMES, getPref, setPref, timeControlText, escapeHtml } from '/board.js';
+    import { api, getSeat, saveSeat, subscribeLobby } from '/net.js';
+
+    const form = document.getElementById('create');
+    form.name.value = getPref('name', '');
+
+    const savedLevel = getPref('level', 0);
+    document.getElementById('levels').innerHTML = LEVEL_NAMES.map((n, i) => `
+      <label><input type="radio" name="level" value="${i}" ${i === savedLevel ? 'checked' : ''}>
+        <b>${i}</b><small>${n}</small></label>`).join('');
+
+    form.tc.addEventListener('change', () =>
+      document.getElementById('custom-tc').classList.toggle('hidden', form.tc.value !== 'custom'));
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const level = Number(form.level.value);
+      setPref('name', form.name.value.trim());
+      setPref('level', level);
+      let timeControl = null;
+      if (form.tc.value === 'custom') timeControl = { minutes: +form.minutes.value, increment: +form.increment.value };
+      else if (form.tc.value) {
+        const [minutes, increment] = form.tc.value.split('+').map(Number);
+        timeControl = { minutes, increment };
+      }
+      const btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      try {
+        const { id, token, color } = await api('games', {
+          method: 'POST',
+          body: { name: form.name.value, level, color: form.color.value, timeControl },
+        });
+        saveSeat(id, token, color);
+        location.href = '/game/' + id;
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+      }
+    });
+
+    function mine(id) { return !!getSeat(id); }
+
+    function playerCell(p) {
+      return p ? `${escapeHtml(p.name)} <span class="badge" title="Nível de visualização">${p.level}</span>` : '<span class="muted">—</span>';
+    }
+
+    async function refresh() {
+      let games;
+      try { games = await api('games'); } catch { return; }
+      const dayAgo = Date.now() - 24 * 3600_000;
+      const open = games.filter((g) => g.status === 'waiting' && g.createdAt > dayAgo);
+      const playing = games.filter((g) => g.status === 'playing');
+
+      document.getElementById('open').innerHTML = open.length ? `<table>${open.map((g) => {
+        const host = g.white ?? g.black;
+        return `<tr class="clickable" data-id="${g.id}">
+          <td>${playerCell(host)}<br><small class="muted">${timeControlText(g.timeControl)} · ${g.white ? 'brancas' : 'pretas'}</small></td>
+          <td style="text-align:right">${mine(g.id) ? '<span class="muted">sua</span>' : '<span class="btn small primary">Aceitar</span>'}</td>
+        </tr>`;
+      }).join('')}</table>` : '<p class="muted">Nenhum desafio aberto. Crie um e mande o link para um amigo.</p>';
+
+      document.getElementById('playing').innerHTML = playing.length ? `<table>${playing.map((g) => `
+        <tr class="clickable" data-id="${g.id}">
+          <td>${playerCell(g.white)}<br>${playerCell(g.black)}</td>
+          <td style="text-align:right">${mine(g.id) ? '<span class="btn small primary">Voltar</span>' : '<span class="muted">assistir</span>'}</td>
+        </tr>`).join('')}</table>` : '<p class="muted">Nenhuma partida em andamento.</p>';
+
+      document.querySelectorAll('tr[data-id]').forEach((tr) =>
+        tr.addEventListener('click', () => (location.href = '/game/' + tr.dataset.id)));
+    }
+
+    subscribeLobby(refresh);
+  </script>
+</body>
+</html>

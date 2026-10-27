@@ -1,0 +1,22 @@
+{
+  "name": "xadrez-as-cegas",
+  "version": "1.0.0",
+  "main": "lib/api.js",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "dev": "node scripts/env.js scripts/build.js && node scripts/env.js dev-server.js",
+    "start": "npm run dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Xadrez às cegas com níveis de visualização por jogador",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
+    "chess.js": "^1.4.0"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  }
+}
