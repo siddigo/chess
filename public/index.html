@@ -19,12 +19,17 @@
         <form id="create">
           <label><span>Seu nome</span><input type="text" name="name" maxlength="24" required></label>
 
-          <label><span>Seu nível de visualização</span></label>
+          <div class="field-head">
+            <span id="level-label">Nível de visualização</span>
+            <button type="button" class="pill" id="custom-toggle" aria-pressed="false">Personalizado</button>
+          </div>
           <div class="levels" id="levels"></div>
 
-          <label style="margin-top:16px"><span>Nível de visualização do adversário</span></label>
-          <div class="levels" id="opp-levels"></div>
-          <p class="muted" style="font-size:13px;margin:8px 0 0">Os níveis não podem ser alterados depois. Seu amigo vê essa configuração antes de aceitar.</p>
+          <div id="opp-levels-wrap" class="hidden">
+            <label style="margin-top:16px"><span>Nível de visualização do adversário</span></label>
+            <div class="levels" id="opp-levels"></div>
+          </div>
+          <p class="muted" style="font-size:13px;margin:8px 0 0" id="level-hint"></p>
 
           <div class="row" style="margin-top:16px">
             <label><span>Jogar de</span>
@@ -34,25 +39,16 @@
                 <option value="black">Pretas</option>
               </select>
             </label>
-            <label><span>Ritmo</span>
-              <select name="tc">
-                <option value="">Sem relógio</option>
-                <option value="1+0">1+0</option>
-                <option value="3+0">3+0</option>
-                <option value="3+2">3+2</option>
-                <option value="5+0">5+0</option>
-                <option value="5+3">5+3</option>
-                <option value="10+0" selected>10+0</option>
-                <option value="10+5">10+5</option>
-                <option value="15+10">15+10</option>
-                <option value="30+0">30+0</option>
-                <option value="custom">Personalizado…</option>
-              </select>
-            </label>
+            <label><span id="tc-label">Ritmo</span><select name="tc"></select></label>
+            <label class="hidden" id="opp-tc-wrap"><span>Ritmo do adversário</span><select name="oppTc"></select></label>
           </div>
           <div class="row hidden" id="custom-tc">
-            <label><span>Minutos</span><input type="number" name="minutes" min="0.5" max="180" step="0.5" value="10"></label>
-            <label><span>Incremento (s)</span><input type="number" name="increment" min="0" max="60" value="0"></label>
+            <label><span id="minutes-label">Minutos</span><input type="number" name="minutes" min="0.5" max="180" step="0.5" value="10"></label>
+            <label><span id="increment-label">Incremento (s)</span><input type="number" name="increment" min="0" max="60" value="0"></label>
+          </div>
+          <div class="row hidden" id="opp-custom-tc">
+            <label><span>Minutos do adversário</span><input type="number" name="oppMinutes" min="0.5" max="180" step="0.5" value="10"></label>
+            <label><span>Incremento do adversário (s)</span><input type="number" name="oppIncrement" min="0" max="60" value="0"></label>
           </div>
           <button class="primary" type="submit" style="width:100%;margin-top:6px">Criar partida</button>
         </form>
@@ -86,28 +82,62 @@
     document.getElementById('levels').innerHTML = levelPicker('level', getPref('level', 0));
     document.getElementById('opp-levels').innerHTML = levelPicker('opponentLevel', getPref('opponentLevel', 0));
 
-    form.tc.addEventListener('change', () =>
-      document.getElementById('custom-tc').classList.toggle('hidden', form.tc.value !== 'custom'));
+    const TC_PRESETS = ['1+0', '3+0', '3+2', '5+0', '5+3', '10+0', '10+5', '15+10', '30+0'];
+    const tcOptions = `<option value="">Sem relógio</option>`
+      + TC_PRESETS.map((t) => `<option value="${t}">${t}</option>`).join('')
+      + `<option value="custom">Personalizado…</option>`;
+    form.tc.innerHTML = form.oppTc.innerHTML = tcOptions;
+    form.tc.value = form.oppTc.value = '10+0';
+
+    // Modo simples: um nível e um ritmo para os dois. "Personalizado": cada jogador tem os seus.
+    const toggle = document.getElementById('custom-toggle');
+    let custom = getPref('customSetup', false);
+    function updateForm() {
+      toggle.setAttribute('aria-pressed', custom);
+      document.getElementById('level-label').textContent = custom ? 'Seu nível de visualização' : 'Nível de visualização';
+      document.getElementById('tc-label').textContent = custom ? 'Seu ritmo' : 'Ritmo';
+      document.getElementById('minutes-label').textContent = custom ? 'Seus minutos' : 'Minutos';
+      document.getElementById('increment-label').textContent = custom ? 'Seu incremento (s)' : 'Incremento (s)';
+      document.getElementById('level-hint').textContent = custom
+        ? 'Os níveis e ritmos não podem ser alterados depois. Seu amigo vê essa configuração antes de aceitar.'
+        : 'Vale para os dois jogadores e não pode ser alterado depois.';
+      document.getElementById('opp-levels-wrap').classList.toggle('hidden', !custom);
+      document.getElementById('opp-tc-wrap').classList.toggle('hidden', !custom);
+      document.getElementById('custom-tc').classList.toggle('hidden', form.tc.value !== 'custom');
+      document.getElementById('opp-custom-tc').classList.toggle('hidden', !custom || form.oppTc.value !== 'custom');
+    }
+    toggle.addEventListener('click', () => { custom = !custom; updateForm(); });
+    form.tc.addEventListener('change', updateForm);
+    form.oppTc.addEventListener('change', updateForm);
+    updateForm();
+
+    function readTc(value, minutes, increment) {
+      if (value === 'custom') return { minutes: +minutes, increment: +increment };
+      if (!value) return null;
+      const [m, i] = value.split('+').map(Number);
+      return { minutes: m, increment: i };
+    }
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const level = Number(form.level.value);
-      const opponentLevel = Number(form.opponentLevel.value);
-      setPref('opponentLevel', opponentLevel);
+      const opponentLevel = custom ? Number(form.opponentLevel.value) : level;
+      const timeControl = readTc(form.tc.value, form.minutes.value, form.increment.value);
+      const opponentTimeControl = custom ? readTc(form.oppTc.value, form.oppMinutes.value, form.oppIncrement.value) : timeControl;
+      if (!timeControl !== !opponentTimeControl) {
+        alert('Os dois jogadores precisam ter relógio, ou nenhum.');
+        return;
+      }
       setPref('name', form.name.value.trim());
       setPref('level', level);
-      let timeControl = null;
-      if (form.tc.value === 'custom') timeControl = { minutes: +form.minutes.value, increment: +form.increment.value };
-      else if (form.tc.value) {
-        const [minutes, increment] = form.tc.value.split('+').map(Number);
-        timeControl = { minutes, increment };
-      }
+      setPref('opponentLevel', opponentLevel);
+      setPref('customSetup', custom);
       const btn = form.querySelector('button[type=submit]');
       btn.disabled = true;
       try {
         const { id, token, color } = await api('games', {
           method: 'POST',
-          body: { name: form.name.value, level, opponentLevel, color: form.color.value, timeControl },
+          body: { name: form.name.value, level, opponentLevel, color: form.color.value, timeControl, opponentTimeControl },
         });
         saveSeat(id, token, color);
         location.href = '/game/' + id;

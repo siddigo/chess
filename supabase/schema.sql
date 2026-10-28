@@ -13,7 +13,7 @@ create table if not exists public.games (
   white_level   smallint check (white_level between 0 and 5),
   black_name    text,
   black_level   smallint check (black_level between 0 and 5),
-  time_control  jsonb,                     -- { "initial": ms, "increment": ms } ou null
+  time_control  jsonb,                     -- { "initial": ms, "increment": ms }, { "w": {...}, "b": {...} } ou null
   clock_w       bigint,                    -- ms restantes no instante last_move_at
   clock_b       bigint,
   last_move_at  bigint,

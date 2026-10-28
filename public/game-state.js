@@ -4,6 +4,10 @@
 
 export const turnOf = (row) => (row.moves.length % 2 === 0 ? 'w' : 'b');
 
+// `time_control` é { initial, increment } (igual para os dois) ou
+// { w: { initial, increment }, b: { initial, increment } } (ritmo por jogador).
+export const tcFor = (tc, color) => tc?.[color] ?? tc;
+
 // O relógio corre desde o início da partida (quando o desafio é aceito).
 export const clockRunning = (row) => row.status === 'playing' && !!row.time_control;
 
