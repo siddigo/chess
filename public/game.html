@@ -47,11 +47,21 @@
       <div>
         <div class="player-bar" id="bar-top"></div>
         <div id="board"></div>
+        <!-- Nível 6: no lugar do tabuleiro, a notação em destaque e a entrada de lances por texto -->
+        <div id="notation-view" class="notation-view">
+          <div class="last-move big" id="big-last-move"></div>
+          <form id="move-form" class="move-form" autocomplete="off">
+            <input type="text" id="move-input" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send">
+            <button class="primary" type="submit">Jogar</button>
+          </form>
+          <div class="move-error" id="move-error"></div>
+          <div class="moves big" id="big-moves"></div>
+        </div>
         <div class="player-bar" id="bar-bottom"></div>
       </div>
 
       <aside class="side">
-        <div class="panel">
+        <div class="panel" id="last-move-panel">
           <div class="last-move" id="last-move"></div>
         </div>
         <div class="panel">
@@ -70,11 +80,11 @@
             <a class="btn primary" href="/">Nova partida</a>
           </div>
         </div>
-        <div class="panel">
+        <div class="panel" id="moves-panel">
           <div class="moves" id="moves"></div>
         </div>
         <div class="panel">
-          <label class="toggle"><input type="checkbox" id="opt-legal"> Mostrar lances possíveis</label>
+          <label class="toggle" id="opt-legal-wrap"><input type="checkbox" id="opt-legal"> Mostrar lances possíveis</label>
           <label class="toggle"><input type="checkbox" id="opt-pt"> Notação em português (C, B, T, D, R)</label>
           <label class="toggle"><input type="checkbox" id="opt-reveal"> Revelar peças ao fim da partida</label>
           <label class="toggle hidden" id="spectator-level-wrap">Nível (espectador)
@@ -89,7 +99,7 @@
   <script src="/vendor/supabase.js"></script>
   <script type="module">
     import { Chess } from '/vendor/chess.js';
-    import { Board, LEVEL_NAMES, appearance, formatSan, getPref, setPref, resultText, formatClock, timeControlText, escapeHtml } from '/board.js';
+    import { Board, LEVEL_NAMES, NOTATION_ONLY, appearance, formatSan, parseMoveInput, getPref, setPref, resultText, formatClock, timeControlText, escapeHtml } from '/board.js';
     import { api, getSeat, saveSeat, subscribeGame } from '/net.js';
 
     const gameId = location.pathname.split('/').pop();
@@ -340,13 +350,14 @@
       el.className = 'start-banner';
       el.innerHTML = `<div><b>A partida começou!</b><span>${escapeHtml(msg)}</span>
         ${state.timeControl ? '<small>O relógio já está correndo.</small>' : ''}</div>`;
-      $('board').appendChild(el);
-      // Some no primeiro clique (que já vale como lance) ou alguns segundos depois de a aba ficar visível.
+      $(viewLevel() === NOTATION_ONLY ? 'notation-view' : 'board').appendChild(el);
+      // Some no primeiro clique ou tecla (que já valem como lance) ou alguns segundos depois de a aba ficar visível.
       const close = () => el.remove();
       const startTimer = () => setTimeout(close, 6000);
       if (document.hidden) document.addEventListener('visibilitychange', startTimer, { once: true });
       else startTimer();
       addEventListener('pointerdown', close, { once: true, capture: true });
+      addEventListener('keydown', close, { once: true, capture: true });
     }
 
     // Com a aba em segundo plano, o título pisca enquanto for a minha vez.
@@ -417,6 +428,25 @@
     }
     let lastLocalMove = null;
 
+    // Nível 6: lances digitados, na notação da configuração (português ou inglês).
+    $('move-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = $('move-input');
+      let msg = '';
+      if (!canMove()) {
+        msg = state?.status === 'playing' ? 'Aguarde a sua vez' : '';
+      } else {
+        const r = parseMoveInput(chess.moves({ verbose: true }), input.value, prefs.pt ? 'pt' : 'en');
+        if (r.error) msg = r.error;
+        else {
+          input.value = '';
+          sendMove(r.move.from, r.move.to, r.move.promotion);
+        }
+      }
+      $('move-error').textContent = msg;
+    });
+    $('move-input').addEventListener('input', () => ($('move-error').textContent = ''));
+
     function askPromotion(color) {
       return new Promise((resolve) => {
         const bg = document.createElement('div');
@@ -454,9 +484,20 @@
         : [];
 
       board.render({ board: chess.board(), level, lastMove, selected, targets, checkSquare });
+      renderNotationView(level === NOTATION_ONLY);
       renderBars();
       renderMoves();
       renderStatus();
+    }
+
+    // Nível 6: esconde o tabuleiro e mostra a notação no lugar dele (com a entrada de lances para o jogador).
+    function renderNotationView(on) {
+      $('game').classList.toggle('notation-only', on);
+      const typing = on && !!seat && state.status === 'playing';
+      $('move-form').classList.toggle('hidden', !typing);
+      if (!typing) $('move-error').textContent = '';
+      $('move-input').placeholder = prefs.pt ? 'Seu lance (ex.: Cf3, exd5, O-O)' : 'Seu lance (ex.: Nf3, exd5, O-O)';
+      if (typing && canMove() && document.activeElement === document.body) $('move-input').focus();
     }
 
     function renderBars() {
@@ -510,14 +551,16 @@
         html += `<div class="mv ${i === sans.length - 1 ? 'current' : ''}">${formatSan(sans[i], lang)}</div>`;
         html += `<div class="mv ${i + 1 === sans.length - 1 ? 'current' : ''}">${sans[i + 1] ? formatSan(sans[i + 1], lang) : ''}</div>`;
       }
-      const el = $('moves');
-      el.innerHTML = html;
-      el.scrollTop = el.scrollHeight;
-
       const n = sans.length;
-      $('last-move').innerHTML = n
+      const last = n
         ? `<small>último lance</small>${Math.ceil(n / 2)}.${n % 2 === 0 ? '..' : ''} ${formatSan(sans[n - 1], lang)}`
         : '<small>último lance</small>—';
+      for (const [movesId, lastId] of [['moves', 'last-move'], ['big-moves', 'big-last-move']]) {
+        const el = $(movesId);
+        el.innerHTML = html;
+        el.scrollTop = el.scrollHeight;
+        $(lastId).innerHTML = last;
+      }
     }
 
     function renderStatus() {

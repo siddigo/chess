@@ -6,6 +6,7 @@
 // Nível 3: todas exceto peões (dama e rei incluídos)
 // Nível 4: todas as peças viram peças de damas
 // Nível 5: peças invisíveis
+// Nível 6: sem tabuleiro, só a notação (lances digitados)
 
 import { tcFor } from '/game-state.js';
 
@@ -16,7 +17,11 @@ export const LEVEL_NAMES = [
   'Só peões visíveis',
   'Todas como damas',
   'Peças invisíveis',
+  'Só a notação',
 ];
+
+/** Nível em que não há tabuleiro: só a lista de lances. */
+export const NOTATION_ONLY = 6;
 
 const DISGUISED = [
   '',
@@ -163,6 +168,51 @@ const PT = { K: 'R', Q: 'D', R: 'T', B: 'B', N: 'C' };
 export function formatSan(san, lang) {
   if (lang !== 'pt') return san;
   return san.replace(/[KQRBN]/g, (c) => PT[c]);
+}
+
+const FROM_PT = { R: 'K', D: 'Q', T: 'R', B: 'B', C: 'N' };
+const SAN_RE = /^([KQRBN])?([a-h])?([1-8])?[x:-]?([a-h][1-8])=?([QRBN])?$/;
+
+/**
+ * Interpreta um lance digitado (SAN como `Cf3`, `exd5`, `O-O`, `e8=D`, ou coordenadas como `g1f3`)
+ * na notação da configuração (`lang` 'pt' ou 'en'). `moves` são os lances legais (verbose do chess.js).
+ * As mensagens de erro não dizem nada sobre a posição: só se o texto é ilegal, ambíguo ou incompleto.
+ * @returns {{ move: object } | { error: string }}
+ */
+export function parseMoveInput(moves, text, lang) {
+  let s = String(text).trim().replace(/[+#!?\s]/g, '');
+  if (!s) return { error: 'Digite um lance' };
+
+  const castle = s.replace(/0/g, 'O').toUpperCase();
+  if (castle === 'O-O' || castle === 'O-O-O') {
+    const flag = castle === 'O-O' ? 'k' : 'q';
+    const m = moves.find((mv) => mv.flags.includes(flag));
+    return m ? { move: m } : { error: `Lance ilegal: ${text.trim()}` };
+  }
+
+  // Peças em maiúscula; as colunas (inclusive a "b") ficam em minúscula.
+  if (lang === 'pt') s = s.replace(/[RDTBC]/g, (c) => FROM_PT[c]);
+  const p = SAN_RE.exec(s);
+  if (!p) return { error: `Não entendi "${text.trim()}". Exemplos: ${lang === 'pt' ? 'Cf3, exd5, O-O, e8=D' : 'Nf3, exd5, O-O, e8=Q'}` };
+  const [, piece, file, rank, to, promo] = p;
+
+  // Origem completa (ex.: g1f3) vale para qualquer peça; sem ela, sem letra é peão.
+  const type = piece ? piece.toLowerCase() : file && rank ? null : 'p';
+  let found = moves.filter((m) =>
+    m.to === to
+    && (!type || m.piece === type)
+    && (!file || m.from[0] === file)
+    && (!rank || m.from[1] === rank));
+  if (promo) found = found.filter((m) => m.promotion === promo.toLowerCase());
+
+  if (!found.length) return { error: `Lance ilegal: ${text.trim()}` };
+  if (found.every((m) => m.promotion) && !promo) {
+    return { error: `Indique a peça da promoção (ex.: ${formatSan(to + '=Q', lang)})` };
+  }
+  if (found.length > 1) {
+    return { error: `Lance ambíguo: indique a coluna ou a linha de origem (ex.: ${formatSan('Nbd2, R1e2', lang)})` };
+  }
+  return { move: found[0] };
 }
 
 export function getPref(key, fallback) {

@@ -10,9 +10,9 @@ create table if not exists public.games (
   started_at    bigint,
   finished_at   bigint,
   white_name    text,
-  white_level   smallint check (white_level between 0 and 5),
+  white_level   smallint check (white_level between 0 and 6),
   black_name    text,
-  black_level   smallint check (black_level between 0 and 5),
+  black_level   smallint check (black_level between 0 and 6),
   time_control  jsonb,                     -- { "initial": ms, "increment": ms }, { "w": {...}, "b": {...} } ou null
   clock_w       bigint,                    -- ms restantes no instante last_move_at
   clock_b       bigint,
@@ -23,6 +23,12 @@ create table if not exists public.games (
   termination   text,
   draw_offer    text check (draw_offer in ('w', 'b'))
 );
+
+-- Bancos criados antes do nível 6: o "create table if not exists" não atualiza as restrições.
+alter table public.games drop constraint if exists games_white_level_check;
+alter table public.games add constraint games_white_level_check check (white_level between 0 and 6);
+alter table public.games drop constraint if exists games_black_level_check;
+alter table public.games add constraint games_black_level_check check (black_level between 0 and 6);
 
 create index if not exists games_created_at_idx on public.games (created_at desc);
 

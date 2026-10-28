@@ -21,13 +21,13 @@ Etapa 9   Torneios                                          precisa da 6
 
 Nível mais difícil: não há tabuleiro, só a lista de lances.
 
-- [ ] Ampliar a restrição `white_level`/`black_level` no `supabase/schema.sql` para `between 0 and 6`, e a validação em `lib/api.js`.
-- [ ] Em `public/game.html`, no nível 6, esconder o tabuleiro e mostrar a notação em destaque (último lance grande + lista completa).
-- [ ] **Entrada de lances por texto** (SAN, ex.: `Cf3`, `exd5`, `O-O`), aceitando notação em português e em inglês conforme a configuração. Sem tabuleiro, não há como clicar.
-- [ ] Feedback de lance inválido/ambíguo sem revelar a posição além do que a notação já revela.
-- [ ] Incluir o nível 6 no replay (`public/replay.html`), no histórico, no seletor do espectador e na tabela de níveis do README.
+- [x] Ampliar a restrição `white_level`/`black_level` no `supabase/schema.sql` para `between 0 and 6`, e a validação em `lib/api.js`.
+- [x] Em `public/game.html`, no nível 6, esconder o tabuleiro e mostrar a notação em destaque (último lance grande + lista completa).
+- [x] **Entrada de lances por texto** (SAN, ex.: `Cf3`, `exd5`, `O-O`), aceitando notação em português e em inglês conforme a configuração. Sem tabuleiro, não há como clicar.
+- [x] Feedback de lance inválido/ambíguo sem revelar a posição além do que a notação já revela.
+- [x] Incluir o nível 6 no replay (`public/replay.html`), no histórico, no seletor do espectador e na tabela de níveis do README.
 
-**A decidir:** o nível 5 continua permitindo clicar no tabuleiro invisível? O nível 6 aceita só texto ou também um teclado de casas (a1–h8)?
+**Decidido:** o nível 5 continua permitindo clicar no tabuleiro invisível. O nível 6 aceita só texto: SAN (português ou inglês, conforme a configuração) ou casas de origem e destino (`g1f3`).
 
 ---
 

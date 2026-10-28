@@ -281,6 +281,33 @@ tr.clickable:hover td { background: var(--panel-2); }
 .replay .moves .mv { cursor: pointer; }
 .replay .moves .mv:hover { background: #3c3b37; }
 
+/* Nível 6: sem tabuleiro, só a notação */
+.notation-view {
+  display: none;
+  position: relative;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 360px;
+  padding: 20px;
+  background: var(--panel);
+  border-radius: var(--radius);
+}
+.notation-only .notation-view { display: flex; }
+.notation-only #board,
+.notation-only #last-move-panel,
+.notation-only #moves-panel,
+.notation-only #opt-legal-wrap,
+.notation-only #btn-flip,
+.notation-only #flip { display: none; }
+.last-move.big { font-size: 56px; min-height: 90px; }
+.last-move.big small { font-size: 14px; }
+.moves.big { font-size: 18px; max-height: 50vh; grid-template-columns: 52px 1fr 1fr; }
+.replay .notation-view .last-move.big { margin: auto 0; }
+.move-form { display: flex; gap: 8px; }
+.move-form input { flex: 1; font: 700 22px/1.2 ui-monospace, 'Cascadia Mono', Consolas, monospace; text-align: center; }
+.move-form input::placeholder { font: 400 15px system-ui, sans-serif; }
+.move-error { min-height: 20px; color: #f08a86; text-align: center; font-size: 14px; }
+
 .status-msg { text-align: center; font-weight: 600; }
 .status-msg.big { font-size: 20px; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
