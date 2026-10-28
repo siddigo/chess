@@ -1,7 +1,17 @@
 {
-  // Ctrl+Shift+P → "Tasks: Run Task" → Fechar release / Deploy em produção
+  // Ctrl+Shift+P → "Tasks: Run Task" → Rodar local / Fechar release / Deploy em produção
+  // Ctrl+Shift+B → Rodar local (base fake), direto
   "version": "2.0.0",
   "tasks": [
+    {
+      "label": "Rodar local (base fake)",
+      "type": "shell",
+      "command": "npm run dev:local",
+      "group": { "kind": "build", "isDefault": true },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true, "clear": true }
+    },
     {
       "label": "Fechar release",
       "type": "shell",

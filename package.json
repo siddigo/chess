@@ -5,6 +5,7 @@
   "scripts": {
     "build": "node scripts/build.js",
     "dev": "node scripts/env.js scripts/build.js && node scripts/env.js dev-server.js",
+    "dev:local": "node scripts/env.js --local scripts/build.js && node scripts/env.js --local dev-server.js",
     "start": "npm run dev",
     "check": "node scripts/check-supabase.js",
     "db:setup": "node scripts/db-setup.js",
