@@ -80,7 +80,7 @@ Para conferir a configuração do Supabase, deixe `npm run dev` rodando e, em ou
    - notação em português (C, B, T, D, R) ou em inglês (N, B, R, Q, K);
    - revelar as peças quando a partida terminar.
 
-O relógio só começa a correr depois do primeiro lance de cada lado. Antes disso, a partida ainda pode ser abortada.
+O relógio começa a correr assim que o desafio é aceito. Até o segundo lance, a partida ainda pode ser abortada.
 
 Se você fechar a aba, basta abrir o link da partida de novo **no mesmo navegador**: ele lembra que você é jogador dela.
 

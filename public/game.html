@@ -137,13 +137,18 @@
       const prevPly = state?.moves.length ?? -1;
       state = s;
       receivedAt = Date.now();
+      markTurnStart();
+      syncChess();
+      if (state.moves.length !== prevPly) selected = null;
+      show();
+    }
+
+    function markTurnStart() {
+      const s = state;
       if (s.status === 'playing' && seat && s.turn === seat && s.moves.length !== turnStartedPly) {
         turnStartedPly = s.moves.length;
         turnStartedAt = Date.now();
       }
-      syncChess();
-      if (state.moves.length !== prevPly) selected = null;
-      show();
     }
 
     function onError(err) {
@@ -245,7 +250,15 @@
         const data = await api(`games/${gameId}/join`, { method: 'POST', body: { name: form.name.value, level } });
         saveSeat(gameId, data.token, data.color);
         seat = data.color;
-        setState(data.game);
+        // O broadcast pode ter chegado antes desta resposta (com seat ainda nulo, como
+        // espectador): refaz orientação, vez e nível agora que sei a minha cor.
+        orientation = null;
+        if (state && state.version >= data.game.version) {
+          markTurnStart();
+          show();
+        } else {
+          setState(data.game);
+        }
       } catch (err) {
         toast(err.message);
         btn.disabled = false;

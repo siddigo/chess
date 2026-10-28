@@ -4,8 +4,8 @@
 
 export const turnOf = (row) => (row.moves.length % 2 === 0 ? 'w' : 'b');
 
-// O relógio só começa a correr depois que cada lado fez seu primeiro lance.
-export const clockRunning = (row) => row.status === 'playing' && !!row.time_control && row.moves.length >= 2;
+// O relógio corre desde o início da partida (quando o desafio é aceito).
+export const clockRunning = (row) => row.status === 'playing' && !!row.time_control;
 
 /** Tempo restante (ms) de `color` no instante `now` (relógio do servidor), sem arredondar para zero. */
 export function rawRemaining(row, color, now) {
