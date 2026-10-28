@@ -467,7 +467,7 @@
         $(id).innerHTML = `
           <div><span class="dot ${color}"></span><span class="name">${escapeHtml(p.name)}</span>
             ${seat === color ? '<span class="muted"> (você)</span>' : ''}
-            <div class="lvl">Nível ${p.level} · ${LEVEL_NAMES[p.level]}</div></div>
+            <div class="lvl">Nível ${p.level} · ${LEVEL_NAMES[p.level]}${state.timeControl?.w ? ` · ${timeControlText(state.timeControl, color)}` : ''}</div></div>
           ${state.timeControl ? `<div class="clock" data-color="${color}"></div>` : ''}`;
       }
       tickClocks();

@@ -7,6 +7,8 @@
 // Nível 4: todas as peças viram peças de damas
 // Nível 5: peças invisíveis
 
+import { tcFor } from '/game-state.js';
+
 export const LEVEL_NAMES = [
   'Normal',
   'Cavalos e bispos ocultos',
@@ -191,9 +193,11 @@ export function formatClock(ms) {
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function timeControlText(tc) {
+export function timeControlText(tc, color) {
   if (!tc) return 'Sem relógio';
-  return `${tc.initial / 60000}+${tc.increment / 1000}`;
+  const text = (t) => `${t.initial / 60000}+${t.increment / 1000}`;
+  if (color) return text(tcFor(tc, color));
+  return tc.w ? `${text(tc.w)} brancas · ${text(tc.b)} pretas` : text(tc);
 }
 
 export function escapeHtml(s) {
