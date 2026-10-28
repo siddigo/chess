@@ -323,3 +323,30 @@ tr.clickable:hover td { background: var(--panel-2); }
   .levels { grid-template-columns: repeat(2, 1fr); }
 }
 .panel:has(> .moves:empty) { display: none; }
+
+#board { position: relative; }
+.start-banner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 50;
+}
+.start-banner > div {
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .5);
+  padding: 18px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 85%;
+  animation: start-pop .35s ease-out;
+}
+.start-banner b { font-size: 22px; color: var(--accent); }
+.start-banner small { color: var(--muted); }
+@keyframes start-pop { from { transform: scale(.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }

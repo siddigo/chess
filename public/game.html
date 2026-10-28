@@ -36,6 +36,9 @@
         <button id="copy-link">Copiar</button>
       </div>
       <p id="waiting-info" class="muted" style="margin-top:14px"></p>
+      <p class="muted" style="font-size:13px">Quando o adversário aceitar, o relógio já começa a correr: você será avisado com som,
+        notificação e no título da aba.</p>
+      <button id="enable-notify" class="small hidden">🔔 Ativar notificações</button>
       <button id="cancel" class="danger small">Cancelar desafio</button>
     </section>
 
@@ -135,12 +138,15 @@
       // ou, na mesma versão, quando ainda não havia estado.
       if (state && s.version <= state.version) return;
       const prevPly = state?.moves.length ?? -1;
+      const prevStatus = state?.status;
       state = s;
       receivedAt = Date.now();
       markTurnStart();
       syncChess();
       if (state.moves.length !== prevPly) selected = null;
       show();
+      if (prevStatus === 'waiting' && s.status === 'playing') announceStart();
+      updateTitle();
     }
 
     function markTurnStart() {
@@ -256,6 +262,8 @@
         if (state && state.version >= data.game.version) {
           markTurnStart();
           show();
+          announceStart();
+          updateTitle();
         } else {
           setState(data.game);
         }
@@ -271,6 +279,94 @@
       $('copy-link').textContent = 'Copiado!';
     };
     $('cancel').onclick = () => post('action', { type: 'cancel' });
+
+    // ------------------------------------------------------------ avisos
+
+    // O relógio corre desde que o desafio é aceito: avisa com som, notificação do
+    // navegador, título da aba piscando e um aviso sobre o tabuleiro.
+    const baseTitle = document.title;
+    let audioCtx = null;
+    let announced = false;
+
+    // Navegadores só liberam áudio depois de uma interação com a página.
+    function unlockAudio() {
+      try {
+        audioCtx ??= new AudioContext();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+      } catch {}
+    }
+    addEventListener('pointerdown', unlockAudio);
+    addEventListener('keydown', unlockAudio);
+
+    function chime() {
+      try {
+        unlockAudio();
+        const t0 = audioCtx.currentTime;
+        [[660, 0], [880, 0.18], [1320, 0.36]].forEach(([freq, at]) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.0001, t0 + at);
+          gain.gain.exponentialRampToValueAtTime(0.3, t0 + at + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.3);
+          osc.connect(gain).connect(audioCtx.destination);
+          osc.start(t0 + at);
+          osc.stop(t0 + at + 0.32);
+        });
+      } catch {}
+    }
+
+    function refreshNotifyButton() {
+      const can = 'Notification' in window && Notification.permission === 'default';
+      $('enable-notify').classList.toggle('hidden', !can);
+    }
+    refreshNotifyButton();
+    $('enable-notify').onclick = () => Notification.requestPermission().then(refreshNotifyButton, refreshNotifyButton);
+
+    function announceStart() {
+      if (announced || !seat || state.status !== 'playing') return;
+      announced = true;
+      const myTurn = state.turn === seat;
+      const opp = state[seat === 'w' ? 'black' : 'white'].name;
+      const msg = myTurn ? 'Você joga de brancas: é a sua vez!' : `Você joga de pretas: aguarde o lance de ${opp}.`;
+      chime();
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+          const n = new Notification('A partida começou!', { body: msg, tag: 'start-' + gameId });
+          n.onclick = () => { focus(); n.close(); };
+        } catch {}
+      }
+      const el = document.createElement('div');
+      el.className = 'start-banner';
+      el.innerHTML = `<div><b>A partida começou!</b><span>${escapeHtml(msg)}</span>
+        ${state.timeControl ? '<small>O relógio já está correndo.</small>' : ''}</div>`;
+      $('board').appendChild(el);
+      // Some no primeiro clique (que já vale como lance) ou alguns segundos depois de a aba ficar visível.
+      const close = () => el.remove();
+      const startTimer = () => setTimeout(close, 6000);
+      if (document.hidden) document.addEventListener('visibilitychange', startTimer, { once: true });
+      else startTimer();
+      addEventListener('pointerdown', close, { once: true, capture: true });
+    }
+
+    // Com a aba em segundo plano, o título pisca enquanto for a minha vez.
+    let titleBlink = null;
+    function updateTitle() {
+      const myTurn = state?.status === 'playing' && seat && state.turn === seat;
+      if (myTurn && document.hidden) {
+        if (titleBlink) return;
+        let on = false;
+        titleBlink = setInterval(() => {
+          on = !on;
+          document.title = on ? (state.moves.length < 2 ? '▶ A partida começou!' : '● Sua vez!') : baseTitle;
+        }, 900);
+      } else {
+        clearInterval(titleBlink);
+        titleBlink = null;
+        document.title = baseTitle;
+      }
+    }
+    document.addEventListener('visibilitychange', updateTitle);
 
     // ------------------------------------------------------------ tabuleiro
 
