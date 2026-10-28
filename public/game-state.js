@@ -37,5 +37,10 @@ export function toPublic(row, now) {
     result: row.result,
     termination: row.termination,
     drawOffer: row.draw_offer,
+    // Vaga ainda livre num desafio, com o nível que o criador definiu para o adversário (null = livre escolha).
+    openSeat:
+      row.status !== 'waiting' ? null
+        : row.white_name == null ? { color: 'w', level: row.white_level ?? null }
+        : { color: 'b', level: row.black_level ?? null },
   };
 }

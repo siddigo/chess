@@ -19,8 +19,12 @@
         <form id="create">
           <label><span>Seu nome</span><input type="text" name="name" maxlength="24" required></label>
 
-          <label><span>Seu nível de visualização (não pode ser alterado depois)</span></label>
+          <label><span>Seu nível de visualização</span></label>
           <div class="levels" id="levels"></div>
+
+          <label style="margin-top:16px"><span>Nível de visualização do adversário</span></label>
+          <div class="levels" id="opp-levels"></div>
+          <p class="muted" style="font-size:13px;margin:8px 0 0">Os níveis não podem ser alterados depois. Seu amigo vê essa configuração antes de aceitar.</p>
 
           <div class="row" style="margin-top:16px">
             <label><span>Jogar de</span>
@@ -76,10 +80,11 @@
     const form = document.getElementById('create');
     form.name.value = getPref('name', '');
 
-    const savedLevel = getPref('level', 0);
-    document.getElementById('levels').innerHTML = LEVEL_NAMES.map((n, i) => `
-      <label><input type="radio" name="level" value="${i}" ${i === savedLevel ? 'checked' : ''}>
+    const levelPicker = (name, saved) => LEVEL_NAMES.map((n, i) => `
+      <label><input type="radio" name="${name}" value="${i}" ${i === saved ? 'checked' : ''}>
         <b>${i}</b><small>${n}</small></label>`).join('');
+    document.getElementById('levels').innerHTML = levelPicker('level', getPref('level', 0));
+    document.getElementById('opp-levels').innerHTML = levelPicker('opponentLevel', getPref('opponentLevel', 0));
 
     form.tc.addEventListener('change', () =>
       document.getElementById('custom-tc').classList.toggle('hidden', form.tc.value !== 'custom'));
@@ -87,6 +92,8 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const level = Number(form.level.value);
+      const opponentLevel = Number(form.opponentLevel.value);
+      setPref('opponentLevel', opponentLevel);
       setPref('name', form.name.value.trim());
       setPref('level', level);
       let timeControl = null;
@@ -100,7 +107,7 @@
       try {
         const { id, token, color } = await api('games', {
           method: 'POST',
-          body: { name: form.name.value, level, color: form.color.value, timeControl },
+          body: { name: form.name.value, level, opponentLevel, color: form.color.value, timeControl },
         });
         saveSeat(id, token, color);
         location.href = '/game/' + id;
@@ -126,7 +133,7 @@
       document.getElementById('open').innerHTML = open.length ? `<table>${open.map((g) => {
         const host = g.white ?? g.black;
         return `<tr class="clickable" data-id="${g.id}">
-          <td>${playerCell(host)}<br><small class="muted">${timeControlText(g.timeControl)} · ${g.white ? 'brancas' : 'pretas'}</small></td>
+          <td>${playerCell(host)}<br><small class="muted">${timeControlText(g.timeControl)} · ${g.white ? 'brancas' : 'pretas'}${g.openSeat?.level != null ? ` · você jogaria no nível ${g.openSeat.level}` : ''}</small></td>
           <td style="text-align:right">${mine(g.id) ? '<span class="muted">sua</span>' : '<span class="btn small primary">Aceitar</span>'}</td>
         </tr>`;
       }).join('')}</table>` : '<p class="muted">Nenhum desafio aberto. Crie um e mande o link para um amigo.</p>';

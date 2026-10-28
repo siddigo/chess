@@ -16,11 +16,13 @@
     <!-- Entrar na partida -->
     <section id="join" class="card hidden" style="max-width:560px;margin:0 auto">
       <h2>Você foi desafiado!</h2>
-      <p id="join-info" class="muted"></p>
+      <div id="join-info"></div>
       <form id="join-form">
         <label><span>Seu nome</span><input type="text" name="name" maxlength="24" required></label>
-        <label><span>Seu nível de visualização (não pode ser alterado depois)</span></label>
-        <div class="levels" id="join-levels"></div>
+        <div id="join-level-wrap" class="hidden">
+          <label><span>Seu nível de visualização (não pode ser alterado depois)</span></label>
+          <div class="levels" id="join-levels"></div>
+        </div>
         <button class="primary" type="submit" style="width:100%;margin-top:16px">Aceitar desafio</button>
       </form>
     </section>
@@ -28,7 +30,7 @@
     <!-- Esperando oponente -->
     <section id="waiting" class="card hidden" style="max-width:560px;margin:0 auto">
       <h2>Aguardando oponente…</h2>
-      <p class="muted">Mande este link para o seu amigo (ele precisa estar na mesma rede, ou acessar pelo endereço que o servidor mostrou ao iniciar):</p>
+      <p class="muted">Mande este link para o seu amigo:</p>
       <div class="share">
         <input type="text" id="share-link" readonly>
         <button id="copy-link">Copiar</button>
@@ -189,7 +191,10 @@
           $('waiting').classList.remove('hidden');
           $('share-link').value = location.href;
           const me = s.white ?? s.black;
-          $('waiting-info').innerHTML = `Você joga de <b>${s.white ? 'brancas' : 'pretas'}</b> no nível <b>${me.level}</b> (${LEVEL_NAMES[me.level]}) · ${timeControlText(s.timeControl)}`;
+          const opp = s.openSeat?.level;
+          $('waiting-info').innerHTML = `Você joga de <b>${s.white ? 'brancas' : 'pretas'}</b> no nível <b>${me.level}</b> (${LEVEL_NAMES[me.level]})`
+            + (opp != null ? `<br>Adversário: nível <b>${opp}</b> (${LEVEL_NAMES[opp]})` : '')
+            + `<br>Ritmo: ${timeControlText(s.timeControl)}`;
         } else {
           showJoin();
         }
@@ -209,10 +214,19 @@
       const s = state;
       const host = s.white ?? s.black;
       $('join').classList.remove('hidden');
-      $('join-info').innerHTML = `<b>${escapeHtml(host.name)}</b> (nível ${host.level}) joga de ${s.white ? 'brancas' : 'pretas'}. Você jogará de <b>${s.white ? 'pretas' : 'brancas'}</b>. Ritmo: ${timeControlText(s.timeControl)}.`;
+      const myLevel = s.openSeat?.level;
+      $('join-info').innerHTML = `
+        <p><b>${escapeHtml(host.name)}</b> te desafiou para uma partida às cegas:</p>
+        <table style="margin-bottom:16px">
+          <tr><td class="muted">${escapeHtml(host.name)}</td><td>${s.white ? 'Brancas' : 'Pretas'}</td><td>Nível <b>${host.level}</b> · ${LEVEL_NAMES[host.level]}</td></tr>
+          <tr><td class="muted">Você</td><td>${s.white ? 'Pretas' : 'Brancas'}</td><td>${myLevel != null ? `Nível <b>${myLevel}</b> · ${LEVEL_NAMES[myLevel]}` : 'Você escolhe abaixo'}</td></tr>
+          <tr><td class="muted">Ritmo</td><td colspan="2">${timeControlText(s.timeControl)}</td></tr>
+        </table>`;
       const form = $('join-form');
       if (!form.name.value) form.name.value = getPref('name', '');
-      if (!$('join-levels').innerHTML) {
+      // Desafios antigos, sem nível definido pelo criador: quem aceita escolhe.
+      $('join-level-wrap').classList.toggle('hidden', myLevel != null);
+      if (myLevel == null && !$('join-levels').innerHTML) {
         const saved = getPref('level', 0);
         $('join-levels').innerHTML = LEVEL_NAMES.map((n, i) => `
           <label><input type="radio" name="level" value="${i}" ${i === saved ? 'checked' : ''}>
@@ -223,9 +237,8 @@
     $('join-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = e.target;
-      const level = Number(form.level.value);
+      const level = form.level ? Number(form.level.value) : undefined;
       setPref('name', form.name.value.trim());
-      setPref('level', level);
       const btn = form.querySelector('button[type=submit]');
       btn.disabled = true;
       try {
