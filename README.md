@@ -53,7 +53,7 @@ navegador ──HTTP──► Vercel (função em São Paulo, lib/api.js) ──
    | `ADMIN_PASSWORD` | uma senha sua, usada para apagar partidas do histórico |
 
 4. Clique em **Deploy**.
-5. Em **Settings → Git → Production Branch**, troque `main` por `prod`.
+5. Em **Settings → Environments → Production → Branch Tracking**, troque `main` por `prod`.
 
 ### 3. Versões e publicação
 
