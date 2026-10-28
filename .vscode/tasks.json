@@ -1,0 +1,33 @@
+{
+  // Ctrl+Shift+P → "Tasks: Run Task" → Fechar release / Deploy em produção
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Fechar release",
+      "type": "shell",
+      "command": "npm run release -- ${input:releaseType}",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true, "clear": true }
+    },
+    {
+      "label": "Deploy em produção",
+      "type": "shell",
+      "command": "npm run deploy -- --escolher",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true, "clear": true }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "releaseType",
+      "type": "pickString",
+      "description": "Tipo de versão",
+      "options": [
+        { "label": "patch: correções (1.0.0 → 1.0.1)", "value": "patch" },
+        { "label": "minor: novidades (1.0.0 → 1.1.0)", "value": "minor" },
+        { "label": "major: mudança grande/incompatível (1.0.0 → 2.0.0)", "value": "major" }
+      ],
+      "default": "patch"
+    }
+  ]
+}

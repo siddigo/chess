@@ -52,7 +52,22 @@ navegador ──HTTP──► Vercel (função em São Paulo, lib/api.js) ──
    | `SUPABASE_SERVICE_ROLE_KEY` (ou `SUPABASE_SECRET_KEY`) | chave secret/service_role |
    | `ADMIN_PASSWORD` | uma senha sua, usada para apagar partidas do histórico |
 
-4. Clique em **Deploy**. Depois, cada `git push` publica uma versão nova automaticamente.
+4. Clique em **Deploy**.
+5. Em **Settings → Git → Production Branch**, troque `main` por `prod`.
+
+### 3. Versões e publicação
+
+Produção é a branch `prod`, que sempre aponta para uma tag de versão. Pushes em `main` não geram deploy (`git.deploymentEnabled` no `vercel.json`); outras branches geram previews.
+
+```bash
+npm run release -- minor   # ou patch, major, 1.4.0: commit + tag vX.Y.Z em main + release no GitHub
+npm run deploy             # mostra a versão em produção e as tags disponíveis
+npm run deploy -- v1.4.0   # aponta prod para v1.4.0 (avançar ou voltar versão) e a Vercel publica
+```
+
+No VS Code: **Ctrl+Shift+P → Tasks: Run Task → Fechar release** (escolhe patch/minor/major) ou **Deploy em produção** (lista as versões e pergunta qual publicar).
+
+O `release` exige estar em `main`, sem alterações pendentes e sincronizado com `origin/main`, e usa o `gh` (GitHub CLI) para criar a release.
 
 > Se mudar alguma variável de ambiente depois, faça um **Redeploy**: a chave pública é gravada no `config.js` durante o build.
 

@@ -7,7 +7,9 @@
     "dev": "node scripts/env.js scripts/build.js && node scripts/env.js dev-server.js",
     "start": "npm run dev",
     "check": "node scripts/check-supabase.js",
-    "db:setup": "node scripts/db-setup.js"
+    "db:setup": "node scripts/db-setup.js",
+    "release": "node scripts/release.js",
+    "deploy": "node scripts/deploy.js"
   },
   "keywords": [],
   "author": "",
