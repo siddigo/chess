@@ -93,6 +93,39 @@ export function subscribeGame(id, onState) {
   };
 }
 
+/**
+ * Espectadores: Supabase Presence num canal único, para a página "Ao vivo" contar todas as
+ * partidas de uma vez. Chama onCounts(Map idDaPartida → nº de espectadores) a cada mudança.
+ * `watch(id)` marca esta aba como espectadora da partida `id` (null = de nenhuma).
+ * Sem Supabase (modo local) não há contagem: retorna null.
+ */
+export function spectators(onCounts) {
+  if (!sb) return null;
+  const key = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+  const channel = sb.channel('espectadores', { config: { presence: { key } } });
+  let watching = null;
+  let subscribed = false;
+  const sync = () => {
+    const counts = new Map();
+    for (const metas of Object.values(channel.presenceState())) {
+      for (const game of new Set(metas.map((m) => m.game))) counts.set(game, (counts.get(game) ?? 0) + 1);
+    }
+    onCounts(counts);
+  };
+  channel.on('presence', { event: 'sync' }, sync).subscribe((status) => {
+    if (status !== 'SUBSCRIBED') return;
+    subscribed = true;
+    if (watching) channel.track({ game: watching });
+  });
+  return {
+    watch(id) {
+      if (id === watching) return;
+      watching = id;
+      if (subscribed) id ? channel.track({ game: id }) : channel.untrack();
+    },
+  };
+}
+
 /** Chama onChange() quando qualquer partida for criada ou alterada. */
 export function subscribeLobby(onChange) {
   onChange();

@@ -24,6 +24,7 @@ navegador ──HTTP──► Vercel (função em São Paulo, lib/api.js) ──
 - **API**: uma única função serverless (`api/handler.js` → `lib/api.js`). Valida os lances com chess.js e controla o relógio.
 - **Banco**: tabela `games`, com leitura pública e escrita só pelo servidor, e tabela `game_secrets`, com os tokens dos jogadores, inacessível ao navegador.
 - **Tempo real**: depois de gravar cada lance, o servidor publica o novo estado num canal **Broadcast privado** (`game:<id>`). O navegador só pode receber; ninguém consegue forjar lances. As alterações da tabela (Postgres Changes) servem de reserva, mais lenta (~400 ms a mais).
+- **Espectadores**: contados com Realtime **Presence** num canal público único (`espectadores`); cada aba de espectador informa qual partida está assistindo.
 - **Relógio**: não há timer no servidor. O tempo é calculado a partir do horário de cada lance. Quando um relógio zera, o cliente avisa e o servidor confere.
 - **Compensação de lag**: até 1 s por lance do tempo gasto na rede deixa de ser cobrado do relógio.
 
@@ -100,6 +101,17 @@ Para conferir a configuração do Supabase, deixe `npm run dev` rodando e, em ou
 O relógio começa a correr assim que o desafio é aceito. Até o segundo lance, a partida ainda pode ser abortada.
 
 Se você fechar a aba, basta abrir o link da partida de novo **no mesmo navegador**: ele lembra que você é jogador dela.
+
+## Assistir partidas
+
+A página **Ao vivo** (`/ao-vivo`) lista as partidas em andamento com os jogadores, os níveis, o ritmo, o número de lances, os relógios correndo e quantas pessoas estão assistindo. Cada partida tem uma miniatura do tabuleiro no nível escolhido no topo da página (ou nenhuma).
+
+Quem abre uma partida da qual não é jogador entra como espectador e escolhe no painel lateral:
+
+- **como as brancas / como as pretas**: vê exatamente o que aquele jogador vê, no nível e no lado dele (no nível 6, só a notação);
+- **nível livre**: qualquer nível de 0 a 6.
+
+A escolha fica salva no navegador e também pode vir no link: `/game/<id>?ver=w`, `?ver=b` ou `?ver=0` a `?ver=6`. O número de espectadores aparece na partida para todos, inclusive os jogadores. No modo local (sem Supabase) não há contagem.
 
 ## Histórico
 

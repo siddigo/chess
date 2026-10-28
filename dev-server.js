@@ -8,7 +8,7 @@ import handler from './lib/api.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' };
-const REWRITES = [[/^\/game\/[^/]+$/, '/game.html'], [/^\/replay\/[^/]+$/, '/replay.html'], [/^\/history$/, '/history.html'], [/^\/$/, '/index.html']];
+const REWRITES = [[/^\/game\/[^/]+$/, '/game.html'], [/^\/replay\/[^/]+$/, '/replay.html'], [/^\/history$/, '/history.html'], [/^\/ao-vivo$/, '/live.html'],[/^\/$/, '/index.html']];
 
 createServer((req, res) => {
   const { pathname } = new URL(req.url, 'http://local');

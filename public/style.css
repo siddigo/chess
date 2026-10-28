@@ -310,6 +310,29 @@ tr.clickable:hover td { background: var(--panel-2); }
 
 .status-msg { text-align: center; font-weight: 600; }
 .status-msg.big { font-size: 20px; }
+.spectator-count { margin-top: 6px; text-align: center; color: var(--muted); font-size: 13px; }
+
+/* ------------------------------------------------------------- ao vivo */
+
+.live-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.live-head h2 { margin: 0; flex: 1; }
+.live-head label { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.live-head select { width: auto; }
+.live-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 16px; }
+.live-card { display: flex; gap: 14px; padding: 14px; margin: 0; }
+.live-card .mini { flex: 0 0 140px; }
+.live-card .mini .board { pointer-events: none; touch-action: auto; }
+.live-card .mini .coord { display: none; }
+.live-card .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.live-player { display: flex; align-items: center; gap: 8px; }
+.live-player .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.live-player .dot { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 1px solid #000; }
+.live-player .clock { min-width: 64px; padding: 2px 8px; font-size: 15px; }
+.live-player.turn .name::after { content: ' ●'; color: var(--accent); }
+.live-meta { color: var(--muted); font-size: 13px; }
+.live-card .actions { margin-top: auto; }
+.live-card .actions > * { flex: 0 1 auto; }
+@media (max-width: 480px) { .live-card .mini { flex-basis: 110px; } }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .actions > * { flex: 1; }
 
@@ -358,6 +381,9 @@ tr.clickable:hover td { background: var(--panel-2); }
 @media (max-width: 820px) {
   .game-layout { grid-template-columns: 1fr; }
   main { padding: 12px 8px; }
+  header.top { gap: 14px; padding: 12px 14px; }
+  header.top nav { gap: 12px; }
+  header.top nav a { white-space: nowrap; }
   .levels { grid-template-columns: repeat(2, 1fr); }
 }
 .panel:has(> .moves:empty) { display: none; }
