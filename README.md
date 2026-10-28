@@ -15,14 +15,14 @@ Desafie amigos no xadrez com **níveis de visualização individuais**: cada jog
 
 ```
 navegador ──HTTP──► Vercel (função em São Paulo, lib/api.js) ──► Supabase Postgres (São Paulo)
-    ▲                                                                   │
-    └──────────────────── Supabase Realtime (cada alteração) ◄──────────┘
+    ▲                                          │
+    └──── Supabase Realtime Broadcast ◄────────┘  (canal privado: só o servidor envia)
 ```
 
 - **Front-end**: HTML/CSS/JS puros em `public/`, servidos pela CDN da Vercel.
 - **API**: uma única função serverless (`api/handler.js` → `lib/api.js`). Valida os lances com chess.js e controla o relógio.
 - **Banco**: tabela `games`, com leitura pública e escrita só pelo servidor, e tabela `game_secrets`, com os tokens dos jogadores, inacessível ao navegador.
-- **Tempo real**: o navegador assina as mudanças da partida pelo Supabase Realtime.
+- **Tempo real**: depois de gravar cada lance, o servidor publica o novo estado num canal **Broadcast privado** (`game:<id>`). O navegador só pode receber; ninguém consegue forjar lances. As alterações da tabela (Postgres Changes) servem de reserva, mais lenta (~400 ms a mais).
 - **Relógio**: não há timer no servidor. O tempo é calculado a partir do horário de cada lance. Quando um relógio zera, o cliente avisa e o servidor confere.
 - **Compensação de lag**: até 1 s por lance do tempo gasto na rede deixa de ser cobrado do relógio.
 
@@ -31,7 +31,9 @@ navegador ──HTTP──► Vercel (função em São Paulo, lib/api.js) ──
 ### 1. Supabase
 
 1. Crie um projeto escolhendo a região **South America (São Paulo)**. A região não pode ser trocada depois.
-2. Abra o **SQL Editor**, cole todo o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**.
+2. Aplique o [`supabase/schema.sql`](supabase/schema.sql) de um destes jeitos:
+   - colando o arquivo no **SQL Editor** e clicando em **Run**; ou
+   - pondo `SUPABASE_DB_URL` no `.env` (botão **Connect** → Connection String) e rodando `npm run db:setup`.
 3. Em **Project Settings → API Keys** (ou **API**), anote:
    - a **Project URL** (`https://xxxx.supabase.co`);
    - a chave **publishable** (`sb_publishable_...`) ou a **anon** (legacy);
@@ -45,9 +47,9 @@ navegador ──HTTP──► Vercel (função em São Paulo, lib/api.js) ──
 
    | Nome | Valor |
    |---|---|
-   | `SUPABASE_URL` | Project URL |
-   | `SUPABASE_ANON_KEY` | chave publishable/anon |
-   | `SUPABASE_SERVICE_ROLE_KEY` | chave secret/service_role |
+   | `SUPABASE_URL` (ou `NEXT_PUBLIC_SUPABASE_URL`) | Project URL |
+   | `SUPABASE_ANON_KEY` (ou `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`) | chave publishable/anon |
+   | `SUPABASE_SERVICE_ROLE_KEY` (ou `SUPABASE_SECRET_KEY`) | chave secret/service_role |
    | `ADMIN_PASSWORD` | uma senha sua, usada para apagar partidas do histórico |
 
 4. Clique em **Deploy**. Depois, cada `git push` publica uma versão nova automaticamente.
@@ -65,6 +67,8 @@ npm run dev        # http://localhost:3000
 
 - **Sem `.env`**: modo 100% local, sem Supabase. Os dados ficam em `data/dev-games.json` e as atualizações chegam por polling (1 s). Bom para testar.
 - **Com `.env`** (copie de [`.env.example`](.env.example)): usa o mesmo Supabase da produção.
+
+Para conferir a configuração do Supabase, deixe `npm run dev` rodando e, em outro terminal, rode `npm run check`. Ele testa as tabelas, as permissões do navegador, o Realtime (com a latência de cada lance) e uma partida completa, e apaga as partidas de teste no final.
 
 ## Como jogar
 

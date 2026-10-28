@@ -129,7 +129,9 @@
 
     function setState(s) {
       // Realtime e respostas HTTP podem chegar fora de ordem: ignora versões antigas.
-      if (state && s.version < state.version) return;
+      // O mesmo estado chega duas vezes (broadcast e reserva): só aceita versões novas
+      // ou, na mesma versão, quando ainda não havia estado.
+      if (state && s.version <= state.version) return;
       const prevPly = state?.moves.length ?? -1;
       state = s;
       receivedAt = Date.now();

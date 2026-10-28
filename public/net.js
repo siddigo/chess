@@ -69,18 +69,28 @@ export function subscribeGame(id, onState) {
     return () => clearInterval(timer);
   }
 
-  const channel = sb
-    .channel('game:' + id)
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${id}` }, ({ new: row }) => {
-      // Se a linha vier incompleta por algum motivo, busca o estado pela API.
-      if (Array.isArray(row?.moves) && row.fen) onState(toPublic(row, serverNow()));
-      else refetch();
-    })
-    .subscribe((status) => {
-      // Ao (re)conectar, busca o estado atual para não perder nada que mudou no meio-tempo.
-      if (status === 'SUBSCRIBED') refetch();
-    });
-  return () => sb.removeChannel(channel);
+  const onRow = (row) => {
+    // Se a linha vier incompleta por algum motivo, busca o estado pela API.
+    if (Array.isArray(row?.moves) && row.fen) onState(toPublic(row, serverNow()));
+    else refetch();
+  };
+  // Ao (re)conectar, busca o estado atual para não perder nada que mudou no meio-tempo.
+  const onStatus = (status) => status === 'SUBSCRIBED' && refetch();
+
+  // Caminho rápido: o servidor publica cada novo estado neste canal privado (só ele pode enviar).
+  const fast = sb
+    .channel('game:' + id, { config: { private: true } })
+    .on('broadcast', { event: 'state' }, ({ payload }) => onRow(payload?.row))
+    .subscribe(onStatus);
+  // Reserva: alterações da tabela (mais lento, mas não depende do broadcast).
+  const backup = sb
+    .channel('game-db:' + id)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${id}` }, ({ new: row }) => onRow(row))
+    .subscribe(onStatus);
+  return () => {
+    sb.removeChannel(fast);
+    sb.removeChannel(backup);
+  };
 }
 
 /** Chama onChange() quando qualquer partida for criada ou alterada. */

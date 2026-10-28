@@ -5,7 +5,9 @@
   "scripts": {
     "build": "node scripts/build.js",
     "dev": "node scripts/env.js scripts/build.js && node scripts/env.js dev-server.js",
-    "start": "npm run dev"
+    "start": "npm run dev",
+    "check": "node scripts/check-supabase.js",
+    "db:setup": "node scripts/db-setup.js"
   },
   "keywords": [],
   "author": "",
@@ -13,10 +15,14 @@
   "description": "Xadrez às cegas com níveis de visualização por jogador",
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
-    "chess.js": "^1.4.0"
+    "chess.js": "^1.4.0",
+    "ws": "^8.22.0"
   },
   "type": "module",
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "pg": "^8.23.1"
   }
 }

@@ -60,3 +60,11 @@ begin
     alter publication supabase_realtime add table public.games;
   end if;
 end $$;
+
+-- Broadcast (caminho rápido): o servidor publica cada novo estado no canal privado
+-- "game:<id>". Navegadores podem RECEBER; como não há policy de insert, só o
+-- servidor (service role) consegue ENVIAR — ninguém forja lances.
+drop policy if exists "receber broadcast das partidas" on realtime.messages;
+create policy "receber broadcast das partidas" on realtime.messages
+  for select to anon, authenticated
+  using (realtime.messages.extension = 'broadcast' and realtime.topic() like 'game:%');
