@@ -10,6 +10,7 @@ Desafie amigos no xadrez com **níveis de visualização individuais**: cada jog
 | 3 | Tudo, menos os peões, vira peça de damas |
 | 4 | Todas as peças viram peças de damas |
 | 5 | Peças invisíveis (só a notação e o destaque do último lance) |
+| 6 | Sem tabuleiro: só a lista de lances; os lances são digitados |
 
 ## Arquitetura
 
@@ -90,6 +91,7 @@ Para conferir a configuração do Supabase, deixe `npm run dev` rodando e, em ou
 1. Em **Jogar**, informe seu nome, escolha seu nível, a cor e o ritmo, e crie o desafio.
 2. Copie o link e mande para o amigo. Ele escolhe o nível dele e aceita.
 3. Mova clicando (origem → destino) ou arrastando. Mesmo no nível 5 dá para clicar numa casa: se houver uma peça sua, os lances possíveis aparecem.
+   No nível 6 não há tabuleiro: digite o lance na notação escolhida nas configurações (ex.: `Cf3`/`Nf3`, `exd5`, `O-O`, `e8=D`/`e8=Q`) ou com as casas de origem e destino (`g1f3`).
 4. Configurações no painel lateral (ficam salvas no navegador):
    - mostrar ou ocultar os lances possíveis;
    - notação em português (C, B, T, D, R) ou em inglês (N, B, R, Q, K);
