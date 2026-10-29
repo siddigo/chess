@@ -8,6 +8,7 @@
     { "source": "/api/:path*", "destination": "/api/handler?path=:path*" },
     { "source": "/game/:id", "destination": "/game.html" },
     { "source": "/replay/:id", "destination": "/replay.html" },
-    { "source": "/history", "destination": "/history.html" }
+    { "source": "/history", "destination": "/history.html" },
+    { "source": "/ao-vivo", "destination": "/live.html" }
   ]
 }

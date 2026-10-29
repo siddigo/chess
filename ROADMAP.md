@@ -33,13 +33,15 @@ Nível mais difícil: não há tabuleiro, só a lista de lances.
 
 ## Etapa 1 — Assistir partidas em andamento
 
-**Já existe:** lista de partidas ao vivo na página inicial (`public/index.html`) e, para o espectador, escolha do nível de visualização (`#spectator-level` em `public/game.html`).
+**Já existia:** lista de partidas ao vivo na página inicial (`public/index.html`) e, para o espectador, escolha do nível de visualização em `public/game.html`.
 
-- [ ] Opção **"Ver como as brancas / Ver como as pretas"**: o espectador assume o nível e a orientação daquele jogador e vê exatamente o que ele vê.
-- [ ] Página dedicada de **partidas ao vivo**, com mais informações: ritmo, níveis, número de lances, relógios e número de espectadores.
-- [ ] Contador de espectadores na partida (Presence no canal da partida).
+- [x] Opção **"Ver como as brancas / Ver como as pretas"**: o espectador assume o nível e a orientação daquele jogador e vê exatamente o que ele vê.
+- [x] Página dedicada de **partidas ao vivo**, com mais informações: ritmo, níveis, número de lances, relógios e número de espectadores.
+- [x] Contador de espectadores na partida (Presence).
 - [ ] Botão "Assistir" no perfil do usuário quando ele estiver jogando (depende das etapas 4 e 5).
-- [ ] Opcional: miniatura do tabuleiro na lista (no nível 0, ou no nível escolhido pelo espectador).
+- [x] Opcional: miniatura do tabuleiro na lista (no nível 0, ou no nível escolhido pelo espectador).
+
+**Decidido:** o Presence fica num canal público único (`espectadores`), e não no canal de cada partida, para a página "Ao vivo" contar todas as partidas com uma só conexão. Cada aba de espectador conta uma vez; os jogadores não entram na contagem. No modo local (sem Supabase) não há contagem. A visão do espectador também pode vir na URL (`/game/<id>?ver=w`, `?ver=b` ou `?ver=0`…`6`).
 
 ---
 

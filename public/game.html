@@ -9,7 +9,7 @@
 <body>
   <header class="top">
     <a class="logo" href="/">♞ Xadrez às Cegas</a>
-    <nav><a href="/">Jogar</a><a href="/history">Histórico</a></nav>
+    <nav><a href="/">Jogar</a><a href="/ao-vivo">Ao vivo</a><a href="/history">Histórico</a></nav>
   </header>
 
   <main>
@@ -66,6 +66,7 @@
         </div>
         <div class="panel">
           <div class="status-msg" id="status"></div>
+          <div class="spectator-count hidden" id="spectator-count"></div>
           <div id="draw-offer" class="draw-offer hidden" style="margin-top:10px">
             <div style="margin-bottom:8px">Seu oponente propõe empate</div>
             <div class="actions"><button class="primary" id="accept-draw">Aceitar</button><button id="decline-draw">Recusar</button></div>
@@ -87,8 +88,8 @@
           <label class="toggle" id="opt-legal-wrap"><input type="checkbox" id="opt-legal"> Mostrar lances possíveis</label>
           <label class="toggle"><input type="checkbox" id="opt-pt"> Notação em português (C, B, T, D, R)</label>
           <label class="toggle"><input type="checkbox" id="opt-reveal"> Revelar peças ao fim da partida</label>
-          <label class="toggle hidden" id="spectator-level-wrap">Nível (espectador)
-            <select id="spectator-level" style="width:auto;margin-left:auto"></select></label>
+          <label class="toggle hidden" id="spectator-view-wrap">Ver
+            <select id="spectator-view" style="width:auto;margin-left:auto"></select></label>
           <button class="small" id="btn-flip" style="margin-top:6px">⇅ Girar tabuleiro</button>
         </div>
       </aside>
@@ -100,7 +101,7 @@
   <script type="module">
     import { Chess } from '/vendor/chess.js';
     import { Board, LEVEL_NAMES, NOTATION_ONLY, appearance, formatSan, parseMoveInput, getPref, setPref, resultText, formatClock, timeControlText, escapeHtml } from '/board.js';
-    import { api, getSeat, saveSeat, subscribeGame } from '/net.js';
+    import { api, getSeat, saveSeat, subscribeGame, spectators } from '/net.js';
 
     const gameId = location.pathname.split('/').pop();
     const $ = (id) => document.getElementById(id);
@@ -115,7 +116,12 @@
     let chess = new Chess();
     let selected = null;
     let orientation = null;
-    let spectatorLevel = 0;
+    // Espectador: 'w'/'b' = vê exatamente o que aquele jogador vê (nível e lado); '0'…'6' = nível livre.
+    // Pode vir na URL (?ver=b), como nos links da página "Ao vivo".
+    const VIEWS = ['w', 'b', ...LEVEL_NAMES.map((_, i) => String(i))];
+    const urlView = new URLSearchParams(location.search).get('ver');
+    let spectatorView = VIEWS.includes(urlView) ? urlView : VIEWS.includes(getPref('spectatorView')) ? getPref('spectatorView') : '0';
+    const viewingAs = () => (spectatorView === 'w' || spectatorView === 'b' ? spectatorView : null);
 
     const prefs = {
       legal: getPref('showLegal', true),
@@ -128,8 +134,15 @@
     $('opt-legal').onchange = (e) => { prefs.legal = e.target.checked; setPref('showLegal', prefs.legal); render(); };
     $('opt-pt').onchange = (e) => { prefs.pt = e.target.checked; setPref('notationPt', prefs.pt); render(); };
     $('opt-reveal').onchange = (e) => { prefs.reveal = e.target.checked; setPref('revealAtEnd', prefs.reveal); render(); };
-    $('spectator-level').innerHTML = LEVEL_NAMES.map((n, i) => `<option value="${i}">${i} · ${n}</option>`).join('');
-    $('spectator-level').onchange = (e) => { spectatorLevel = Number(e.target.value); render(); };
+    $('spectator-view').onchange = (e) => {
+      spectatorView = e.target.value;
+      setPref('spectatorView', spectatorView);
+      if (viewingAs()) {
+        orientation = viewingAs();
+        board.setOrientation(orientation);
+      }
+      render();
+    };
     $('btn-flip').onclick = () => { orientation = orientation === 'w' ? 'b' : 'w'; board.setOrientation(orientation); render(); };
 
     function toast(msg) {
@@ -224,12 +237,31 @@
 
       $('game').classList.remove('hidden');
       if (!orientation) {
-        orientation = seat ?? 'w';
+        orientation = seat ?? viewingAs() ?? 'w';
         board.setOrientation(orientation);
       }
-      $('spectator-level-wrap').classList.toggle('hidden', !!seat);
+      $('spectator-view-wrap').classList.toggle('hidden', !!seat);
+      if (!seat && !$('spectator-view').options.length) renderSpectatorOptions();
+      presence?.watch(s.status === 'playing' && !seat ? gameId : null);
       render();
     }
+
+    function renderSpectatorOptions() {
+      const as = (c) => {
+        const p = state[c === 'w' ? 'white' : 'black'];
+        return `<option value="${c}">como ${escapeHtml(p.name)} (${c === 'w' ? 'brancas' : 'pretas'} · nível ${p.level})</option>`;
+      };
+      $('spectator-view').innerHTML = `<optgroup label="O que um jogador vê">${as('w')}${as('b')}</optgroup>`
+        + `<optgroup label="Nível livre">${LEVEL_NAMES.map((n, i) => `<option value="${i}">${i} · ${n}</option>`).join('')}</optgroup>`;
+      $('spectator-view').value = spectatorView;
+    }
+
+    // Quantas pessoas estão assistindo (só com Supabase; no modo local não há contagem).
+    let spectatorCount = 0;
+    const presence = spectators((counts) => {
+      spectatorCount = counts.get(gameId) ?? 0;
+      if (state && state.status !== 'waiting') renderStatus();
+    });
 
     function showJoin() {
       const s = state;
@@ -400,8 +432,9 @@
 
     function viewLevel() {
       if (state.status === 'finished' && prefs.reveal) return 0;
-      if (seat) return state[seat === 'w' ? 'white' : 'black'].level;
-      return spectatorLevel;
+      const as = seat ?? viewingAs();
+      if (as) return state[as === 'w' ? 'white' : 'black'].level;
+      return Number(spectatorView);
     }
 
     function tryMove(from, to) {
@@ -507,7 +540,7 @@
         const p = state[color === 'w' ? 'white' : 'black'];
         $(id).innerHTML = `
           <div><span class="dot ${color}"></span><span class="name">${escapeHtml(p.name)}</span>
-            ${seat === color ? '<span class="muted"> (você)</span>' : ''}
+            ${seat === color ? '<span class="muted"> (você)</span>' : !seat && viewingAs() === color ? '<span class="muted"> · 👁 sua visão</span>' : ''}
             <div class="lvl">Nível ${p.level} · ${LEVEL_NAMES[p.level]}${state.timeControl?.w ? ` · ${timeControlText(state.timeControl, color)}` : ''}</div></div>
           ${state.timeControl ? `<div class="clock" data-color="${color}"></div>` : ''}`;
       }
@@ -573,6 +606,8 @@
       $('btn-draw').disabled = s.drawOffer === seat;
       $('btn-draw').textContent = s.drawOffer === seat ? 'Empate proposto' : '½ Empate';
       $('draw-offer').classList.toggle('hidden', !(playing && seat && s.drawOffer && s.drawOffer !== seat));
+      $('spectator-count').classList.toggle('hidden', !presence || !playing);
+      $('spectator-count').textContent = spectatorCount === 1 ? '👁 1 espectador' : `👁 ${spectatorCount} espectadores`;
 
       const statusEl = $('status');
       if (playing) {

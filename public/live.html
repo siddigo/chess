@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ao vivo · Xadrez às Cegas</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="logo" href="/">♞ Xadrez às Cegas</a>
+    <nav><a href="/">Jogar</a><a href="/ao-vivo" class="active">Ao vivo</a><a href="/history">Histórico</a></nav>
+  </header>
+
+  <main>
+    <div class="live-head">
+      <h2>Partidas ao vivo <span class="muted" id="total"></span></h2>
+      <label>Miniatura <select id="thumb-level"></select></label>
+    </div>
+    <div id="list" class="live-grid"><p class="muted">Carregando…</p></div>
+  </main>
+
+  <script src="/config.js"></script>
+  <script src="/vendor/supabase.js"></script>
+  <script type="module">
+    import { Chess } from '/vendor/chess.js';
+    import { Board, LEVEL_NAMES, NOTATION_ONLY, getPref, setPref, formatClock, timeControlText, escapeHtml } from '/board.js';
+    import { api, getSeat, subscribeLobby, spectators } from '/net.js';
+
+    const $ = (id) => document.getElementById(id);
+    let games = [];
+    let receivedAt = 0;
+    let counts = new Map();
+
+    // Nível das miniaturas (-1 = sem miniatura). O nível 6 não tem tabuleiro, então não entra.
+    let thumbLevel = getPref('liveThumbLevel', 0);
+    $('thumb-level').innerHTML = '<option value="-1">Sem miniatura</option>'
+      + LEVEL_NAMES.slice(0, NOTATION_ONLY).map((n, i) => `<option value="${i}">Nível ${i} · ${n}</option>`).join('');
+    $('thumb-level').value = thumbLevel;
+    $('thumb-level').onchange = (e) => { thumbLevel = Number(e.target.value); setPref('liveThumbLevel', thumbLevel); render(); };
+
+    const presence = spectators((c) => { counts = c; renderCounts(); });
+
+    function clockMs(g, color) {
+      let ms = g.clocks[color];
+      if (g.clockRunning && g.turn === color) ms -= Date.now() - receivedAt;
+      return Math.max(0, ms);
+    }
+
+    function since(g) {
+      const min = Math.floor((g.serverNow - g.startedAt + Date.now() - receivedAt) / 60_000);
+      return min < 1 ? 'começou agora' : min < 60 ? `há ${min} min` : `há ${Math.floor(min / 60)} h ${min % 60} min`;
+    }
+
+    function player(g, color) {
+      const p = g[color === 'w' ? 'white' : 'black'];
+      return `<div class="live-player ${g.turn === color ? 'turn' : ''}">
+        <span class="dot ${color}"></span>
+        <span class="name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+        <span class="badge" title="Nível de visualização: ${LEVEL_NAMES[p.level]}">${p.level}</span>
+        ${g.timeControl ? `<span class="clock" data-id="${g.id}" data-color="${color}"></span>` : ''}
+      </div>`;
+    }
+
+    function card(g) {
+      const n = g.moveCount;
+      const moveText = n ? `lance ${Math.ceil(n / 2)}` : 'nenhum lance';
+      const actions = getSeat(g.id)
+        ? `<a class="btn small primary" href="/game/${g.id}">Voltar à partida</a>`
+        : `<a class="btn small primary" href="/game/${g.id}">Assistir</a>
+           <a class="btn small" href="/game/${g.id}?ver=w" title="Ver o que as brancas veem">como brancas</a>
+           <a class="btn small" href="/game/${g.id}?ver=b" title="Ver o que as pretas veem">como pretas</a>`;
+      return `<section class="card live-card">
+        ${thumbLevel >= 0 ? `<div class="mini"><div data-board="${g.id}"></div></div>` : ''}
+        <div class="info">
+          ${player(g, 'b')}
+          ${player(g, 'w')}
+          <div class="live-meta">${timeControlText(g.timeControl)} · ${moveText} · ${since(g)}
+            <span data-spec="${g.id}"></span></div>
+          <div class="actions">${actions}</div>
+        </div>
+      </section>`;
+    }
+
+    function render() {
+      $('total').textContent = games.length ? `(${games.length})` : '';
+      if (!games.length) {
+        $('list').innerHTML = '<p class="muted">Nenhuma partida em andamento. <a href="/">Crie um desafio</a>.</p>';
+        return;
+      }
+      $('list').innerHTML = games.map(card).join('');
+      if (thumbLevel >= 0) {
+        for (const g of games) {
+          const board = new Board(document.querySelector(`[data-board="${g.id}"]`));
+          board.render({ board: new Chess(g.fen).board(), level: thumbLevel, lastMove: g.lastMove });
+        }
+      }
+      renderCounts();
+      tickClocks();
+    }
+
+    function renderCounts() {
+      document.querySelectorAll('[data-spec]').forEach((el) => {
+        const c = counts.get(el.dataset.spec) ?? 0;
+        el.textContent = presence ? ` · 👁 ${c}` : '';
+        el.title = c === 1 ? '1 espectador' : `${c} espectadores`;
+      });
+    }
+
+    function tickClocks() {
+      document.querySelectorAll('.clock[data-id]').forEach((el) => {
+        const g = games.find((x) => x.id === el.dataset.id);
+        if (!g) return;
+        const c = el.dataset.color;
+        const ms = clockMs(g, c);
+        el.textContent = formatClock(ms);
+        el.classList.toggle('active', g.clockRunning && g.turn === c);
+        el.classList.toggle('low', ms < 20_000);
+      });
+    }
+    setInterval(tickClocks, 200);
+
+    async function refresh() {
+      let list;
+      try { list = await api('games'); } catch { return; }
+      games = list.filter((g) => g.status === 'playing');
+      receivedAt = Date.now();
+      render();
+    }
+
+    subscribeLobby(refresh);
+  </script>
+</body>
+</html>
