@@ -7,7 +7,7 @@ import os from 'node:os';
 import handler from './lib/api.js';
 
 const PORT = Number(process.env.PORT) || 3000;
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.txt': 'text/plain', '.wasm': 'application/wasm' };
 const REWRITES = [[/^\/game\/[^/]+$/, '/game.html'], [/^\/replay\/[^/]+$/, '/replay.html'], [/^\/history$/, '/history.html'], [/^\/ao-vivo$/, '/live.html'],[/^\/$/, '/index.html']];
 
 createServer((req, res) => {
@@ -20,7 +20,8 @@ createServer((req, res) => {
     res.statusCode = 404;
     return res.end('Não encontrado');
   }
-  res.setHeader('Content-Type', (TYPES[path.extname(full)] ?? 'application/octet-stream') + '; charset=utf-8');
+  const type = TYPES[path.extname(full)] ?? 'application/octet-stream';
+  res.setHeader('Content-Type', type.startsWith('text/') || type.endsWith('json') || type.endsWith('xml') ? type + '; charset=utf-8' : type);
   fs.createReadStream(full).pipe(res);
 }).listen(PORT, '0.0.0.0', () => {
   console.log(`\nXadrez às cegas (local) rodando!\n\n  Neste computador:  http://localhost:${PORT}`);

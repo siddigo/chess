@@ -16,7 +16,10 @@
     <section class="game-layout" id="layout">
       <div>
         <div class="player-bar" id="bar-top"></div>
-        <div id="board"></div>
+        <div class="board-wrap">
+          <div class="eval-bar hidden" id="eval-bar"></div>
+          <div id="board"></div>
+        </div>
         <div id="notation-view" class="notation-view"><div class="last-move big" id="big-move"></div></div>
         <div class="player-bar" id="bar-bottom"></div>
         <div class="actions" style="margin-top:8px">
@@ -30,6 +33,29 @@
           <div class="muted" id="meta" style="text-align:center;font-size:13px"></div>
         </div>
         <div class="panel"><div class="moves" id="moves" style="max-height:360px"></div></div>
+
+        <div class="panel analysis">
+          <h3>Análise</h3>
+          <div id="an-start">
+            <div class="an-run">
+              <select id="an-depth"></select>
+              <button class="primary" id="an-run">Analisar partida</button>
+            </div>
+          </div>
+          <div id="an-progress" class="hidden">
+            <div class="progress"><div id="an-bar"></div></div>
+            <div class="an-progress-row"><span class="muted" id="an-progress-text"></span><button class="small" id="an-cancel">Cancelar</button></div>
+          </div>
+          <p class="muted an-note" id="an-note"></p>
+          <div id="an-result" class="hidden">
+            <table class="an-summary" id="an-summary"></table>
+            <svg class="eval-graph" id="an-graph"></svg>
+            <div class="an-move" id="an-move"></div>
+            <div class="an-lines" id="an-lines"></div>
+            <label class="toggle"><input type="checkbox" id="an-arrows"> Setas dos melhores lances</label>
+          </div>
+        </div>
+
         <div class="panel">
           <label class="toggle">Ver no nível
             <select id="level" style="width:auto;margin-left:auto"></select></label>
@@ -48,6 +74,8 @@
     import { Chess } from '/vendor/chess.js';
     import { Board, LEVEL_NAMES, NOTATION_ONLY, formatSan, getPref, setPref, resultText, timeControlText, escapeHtml } from '/board.js';
     import { api } from '/net.js';
+    import { Engine } from '/engine.js';
+    import { DEPTHS, CLASSES, analysePosition, reviewMove, summarize, formatScore, lineText, sanOf, renderEvalBar, renderGraph } from '/analysis.js';
 
     const $ = (id) => document.getElementById(id);
     const gameId = location.pathname.split('/').pop();
@@ -62,9 +90,11 @@
     // Pré-calcula as posições de cada lance.
     const chess = new Chess();
     const positions = [chess.board()];
+    const fens = [chess.fen()];
     for (const m of game.moves) {
       chess.move({ from: m.from, to: m.to, promotion: m.promotion });
       positions.push(chess.board());
+      fens.push(chess.fen());
     }
 
     let ply = game.moves.length;
@@ -104,9 +134,156 @@
     $('result').textContent = resultText(game.result) || 'Em andamento';
     $('meta').innerHTML = `${escapeHtml(game.termination ?? '')}<br>${d} · ${timeControlText(game.timeControl)}`;
 
+    // ------------------------------------------------------------ análise
+
+    // results[i]: análise da posição depois de i lances; reviews[i]: classificação do lance i (0 = 1º lance).
+    let results = [];
+    let reviews = [];
+    let analysedDepth = null;
+    let engine = null;
+    let runId = 0;
+    let analysing = false;
+    let arrows = getPref('analysisArrows', true);
+    const CACHE_KEY = 'analysis:' + gameId;
+    // Só depois do fim: durante a partida, a análise ajudaria quem está jogando.
+    const canAnalyse = game.status === 'finished';
+
+    let depth = getPref('analysisDepth', 14);
+    if (!DEPTHS.some((x) => x.depth === depth)) depth = 14;
+    $('an-depth').innerHTML = DEPTHS.map((x) => `<option value="${x.depth}">${x.label} (profundidade ${x.depth})</option>`).join('');
+    $('an-depth').value = depth;
+    $('an-depth').onchange = (e) => { depth = Number(e.target.value); setPref('analysisDepth', depth); };
+    $('an-arrows').checked = arrows;
+    $('an-arrows').onchange = (e) => { arrows = e.target.checked; setPref('analysisArrows', arrows); render(); };
+    $('an-run').onclick = runAnalysis;
+    $('an-cancel').onclick = () => {
+      runId++;
+      engine?.stop();
+      analysing = false;
+      renderAnalysisControls();
+    };
+
+    function computeReviews() {
+      reviews = game.moves.map((m, i) => (results[i] && results[i + 1]
+        ? reviewMove(results[i], results[i + 1], m, i % 2 === 0 ? 'w' : 'b') : undefined));
+    }
+
+    // A análise fica salva neste navegador para não recalcular.
+    try {
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
+      if (canAnalyse && cached?.results?.length === fens.length) {
+        results = cached.results;
+        analysedDepth = cached.depth;
+        computeReviews();
+      }
+    } catch {}
+
+    async function runAnalysis() {
+      const id = ++runId;
+      analysing = true;
+      results = [];
+      reviews = [];
+      analysedDepth = depth;
+      renderAnalysisControls();
+      render();
+      try {
+        engine ??= new Engine();
+        await engine.ready;
+        for (let i = 0; i < fens.length; i++) {
+          const r = await analysePosition(engine, fens[i], { depth, multipv: 3 });
+          if (id !== runId) return;
+          // Guarda só o começo de cada linha: é o que aparece e mantém o cache pequeno.
+          results[i] = { ...r, lines: r.lines.map((l) => ({ score: l.score, pv: l.pv.slice(0, 10) })) };
+          computeReviews();
+          progress(i + 1);
+          render();
+        }
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ depth, results })); } catch {}
+      } catch (err) {
+        if (id !== runId) return;
+        engine?.terminate();
+        engine = null;
+        $('an-note').textContent = `Não foi possível analisar: ${err.message}`;
+      } finally {
+        if (id === runId) {
+          analysing = false;
+          renderAnalysisControls();
+        }
+      }
+    }
+
+    function progress(done) {
+      $('an-bar').style.width = `${(done / fens.length) * 100}%`;
+      $('an-progress-text').textContent = `Posição ${done} de ${fens.length}`;
+    }
+
+    function renderAnalysisControls() {
+      const complete = results.length === fens.length;
+      $('an-start').classList.toggle('hidden', analysing || !canAnalyse);
+      $('an-progress').classList.toggle('hidden', !analysing);
+      $('an-run').textContent = complete ? 'Analisar de novo' : 'Analisar partida';
+      if (analysing) progress(results.length);
+      $('an-note').textContent = !canAnalyse
+        ? 'A análise fica disponível quando a partida terminar.'
+        : complete && !analysing
+          ? `Stockfish, profundidade ${analysedDepth}. Fica salva neste navegador.`
+          : !results.length ? 'O Stockfish roda no seu navegador: nada é enviado ao servidor.' : '';
+    }
+
+    function renderAnalysis() {
+      $('an-result').classList.toggle('hidden', !results.length);
+      const r = results[ply];
+      const evalOn = results.length > 0 && level !== NOTATION_ONLY;
+      $('eval-bar').classList.toggle('hidden', !evalOn);
+      if (evalOn) renderEvalBar($('eval-bar'), r?.score, orientation);
+      if (!results.length) return;
+
+      const lang = pt ? 'pt' : 'en';
+      const row = (color) => {
+        const s = summarize(reviews, color);
+        const p = game[color === 'w' ? 'white' : 'black'];
+        return `<tr><td><span class="dot ${color}"></span>${escapeHtml(p?.name ?? '?')}</td>
+          <td>${s.accuracy == null ? '—' : Math.round(s.accuracy) + '%'}</td>
+          <td class="cls-inaccuracy">${s.inaccuracy}</td><td class="cls-mistake">${s.mistake}</td><td class="cls-blunder">${s.blunder}</td></tr>`;
+      };
+      $('an-summary').innerHTML = `<tr><th></th><th>Precisão</th><th title="Imprecisões">?!</th><th title="Erros">?</th><th title="Capivaradas">??</th></tr>${row('w')}${row('b')}`;
+
+      renderGraph($('an-graph'), fens.map((_, i) => results[i]), reviews, ply, go);
+
+      const rv = ply > 0 ? reviews[ply - 1] : null;
+      if (rv) {
+        const m = game.moves[ply - 1];
+        const label = `${Math.ceil(ply / 2)}.${ply % 2 === 0 ? '..' : ''} ${formatSan(m.san, lang)}`;
+        const bestTxt = rv.isBest || !rv.best ? 'o melhor lance'
+          : `melhor era ${sanOf(fens[ply - 1], rv.best, lang)} (${formatScore(results[ply - 1].score)})`;
+        $('an-move').innerHTML = `<b>${label}</b> <span class="cls-${rv.cls}">${CLASSES[rv.cls].label}${CLASSES[rv.cls].symbol ? ' ' + CLASSES[rv.cls].symbol : ''}</span><span class="muted"> · ${bestTxt}</span>`;
+      } else {
+        $('an-move').innerHTML = '';
+      }
+
+      if (!r) {
+        $('an-lines').innerHTML = analysing ? '<div class="muted">Analisando…</div>' : '';
+      } else if (!r.lines.length) {
+        $('an-lines').innerHTML = `<div class="muted">${'mate' in r.score ? 'Xeque-mate' : 'Empate'}</div>`;
+      } else {
+        $('an-lines').innerHTML = r.lines.map((l) =>
+          `<div class="an-line"><span class="score">${formatScore(l.score)}</span><span>${lineText(fens[ply], l.pv, lang)}</span></div>`).join('');
+      }
+    }
+
+    function analysisArrows() {
+      const r = results[ply];
+      if (!arrows || !r) return [];
+      const seen = new Set();
+      return r.lines.map((l) => l.pv[0]).filter((u) => u && !seen.has(u) && seen.add(u))
+        .map((u, i) => ({ from: u.slice(0, 2), to: u.slice(2, 4), kind: i === 0 ? 'best' : 'alt' }));
+    }
+
+    // ------------------------------------------------------------ render
+
     function render() {
       const lastMove = ply > 0 ? game.moves[ply - 1] : null;
-      board.render({ board: positions[ply], level, lastMove });
+      board.render({ board: positions[ply], level, lastMove, arrows: analysisArrows() });
       $('layout').classList.toggle('notation-only', level === NOTATION_ONLY);
 
       const bottom = orientation, top = bottom === 'w' ? 'b' : 'w';
@@ -119,8 +296,11 @@
       const lang = pt ? 'pt' : 'en';
       let html = '';
       game.moves.forEach((m, i) => {
+        const rv = reviews[i];
+        const sym = rv && CLASSES[rv.cls].symbol;
         if (i % 2 === 0) html += `<div class="num">${i / 2 + 1}.</div>`;
-        html += `<div class="mv ${i + 1 === ply ? 'current' : ''}" data-ply="${i + 1}">${formatSan(m.san, lang)}</div>`;
+        html += `<div class="mv ${i + 1 === ply ? 'current' : ''} ${rv ? 'cls-' + rv.cls : ''}" data-ply="${i + 1}"`
+          + `${rv ? ` title="${CLASSES[rv.cls].label}"` : ''}>${formatSan(m.san, lang)}${sym ? `<span class="sym">${sym}</span>` : ''}</div>`;
       });
       if (game.moves.length % 2 === 1) html += '<div></div>';
       $('moves').innerHTML = html;
@@ -130,8 +310,11 @@
       $('big-move').innerHTML = ply
         ? `<small>lance ${ply} de ${game.moves.length}</small>${Math.ceil(ply / 2)}.${ply % 2 === 0 ? '..' : ''} ${formatSan(game.moves[ply - 1].san, lang)}`
         : `<small>posição inicial</small>—`;
+
+      renderAnalysis();
     }
 
+    renderAnalysisControls();
     render();
   </script>
 </body>

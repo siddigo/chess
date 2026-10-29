@@ -71,6 +71,42 @@ export class Board {
         this.squares.set(sq, div);
       }
     }
+    // Setas (melhores lances da análise) por cima das casas.
+    this.arrowsEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    this.arrowsEl.setAttribute('class', 'arrows');
+    this.arrowsEl.setAttribute('viewBox', '0 0 8 8');
+    this.el.appendChild(this.arrowsEl);
+    this.arrowsKey = '';
+  }
+
+  /** Centro da casa nas coordenadas do SVG (0–8), conforme a orientação. */
+  center(sq) {
+    const f = FILES.indexOf(sq[0]);
+    const r = Number(sq[1]) - 1;
+    return this.orientation === 'w' ? [f + 0.5, 7.5 - r] : [7.5 - f, r + 0.5];
+  }
+
+  /** @param {{from:string,to:string,kind?:string}[]} arrows `kind` vira classe CSS (ex.: 'best', 'alt'). */
+  renderArrows(arrows) {
+    const key = arrows.map((a) => a.from + a.to + a.kind).join();
+    if (key === this.arrowsKey) return;
+    this.arrowsKey = key;
+    // A primeira fica por cima: desenha de trás para a frente.
+    this.arrowsEl.innerHTML = [...arrows].reverse().map((a) => {
+      const [x1, y1] = this.center(a.from);
+      const [x2, y2] = this.center(a.to);
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      const [dx, dy] = [(x2 - x1) / len, (y2 - y1) / len];
+      const [nx, ny] = [-dy, dx];
+      const shaft = 0.2, head = 0.5, headLen = 0.45;
+      const start = [x1 + dx * 0.15, y1 + dy * 0.15];
+      const tip = [x2 - dx * 0.15, y2 - dy * 0.15];
+      const base = [tip[0] - dx * headLen, tip[1] - dy * headLen];
+      const p = (pt, w) => `${(pt[0] + nx * w).toFixed(3)},${(pt[1] + ny * w).toFixed(3)}`;
+      const points = [p(start, shaft / 2), p(base, shaft / 2), p(base, head / 2), p(tip, 0),
+        p(base, -head / 2), p(base, -shaft / 2), p(start, -shaft / 2)].join(' ');
+      return `<polygon class="${a.kind ?? 'best'}" points="${points}"/>`;
+    }).join('');
   }
 
   setOrientation(color) {
@@ -82,9 +118,10 @@ export class Board {
   /**
    * @param {{ board: (null|{type:string,color:string,square:string})[][], level:number,
    *   lastMove?: {from:string,to:string}|null, selected?: string|null, targets?: {to:string,capture:boolean}[],
-   *   checkSquare?: string|null }} s
+   *   checkSquare?: string|null, arrows?: {from:string,to:string,kind?:string}[] }} s
    */
   render(s) {
+    this.renderArrows(s.arrows ?? []);
     const targets = new Map((s.targets ?? []).map((t) => [t.to, t]));
     const pieces = new Map();
     for (const row of s.board) for (const p of row) if (p) pieces.set(p.square, p);
