@@ -46,7 +46,10 @@
     <section id="game" class="game-layout hidden">
       <div>
         <div class="player-bar" id="bar-top"></div>
-        <div id="board"></div>
+        <div class="board-wrap">
+          <div class="eval-bar hidden" id="eval-bar"></div>
+          <div id="board"></div>
+        </div>
         <!-- Nível 6: no lugar do tabuleiro, a notação em destaque e a entrada de lances por texto -->
         <div id="notation-view" class="notation-view">
           <div class="last-move big" id="big-last-move"></div>
@@ -84,6 +87,16 @@
         <div class="panel" id="moves-panel">
           <div class="moves" id="moves"></div>
         </div>
+        <!-- Só para espectadores: os jogadores nunca veem (nem carregam) o engine -->
+        <div class="panel live-analysis hidden" id="live-analysis">
+          <h3>Análise ao vivo <span class="live-eval" id="live-eval"></span></h3>
+          <label class="toggle"><input type="checkbox" id="la-bar"> Barra de avaliação</label>
+          <label class="toggle"><input type="checkbox" id="la-class"> Classificação do lance</label>
+          <label class="toggle"><input type="checkbox" id="la-best"> Melhores lances</label>
+          <p class="muted an-note" id="la-note"></p>
+          <div class="an-move" id="la-move"></div>
+          <div class="an-lines" id="la-lines"></div>
+        </div>
         <div class="panel">
           <label class="toggle" id="opt-legal-wrap"><input type="checkbox" id="opt-legal"> Mostrar lances possíveis</label>
           <label class="toggle"><input type="checkbox" id="opt-pt"> Notação em português (C, B, T, D, R)</label>
@@ -102,6 +115,8 @@
     import { Chess } from '/vendor/chess.js';
     import { Board, LEVEL_NAMES, NOTATION_ONLY, appearance, formatSan, parseMoveInput, getPref, setPref, resultText, formatClock, timeControlText, escapeHtml } from '/board.js';
     import { api, getSeat, saveSeat, subscribeGame, spectators } from '/net.js';
+    import { Engine } from '/engine.js';
+    import { CLASSES, analysePosition, reviewMove, formatScore, lineText, renderEvalBar } from '/analysis.js';
 
     const gameId = location.pathname.split('/').pop();
     const $ = (id) => document.getElementById(id);
@@ -521,6 +536,7 @@
       renderBars();
       renderMoves();
       renderStatus();
+      updateLiveAnalysis();
     }
 
     // Nível 6: esconde o tabuleiro e mostra a notação no lugar dele (com a entrada de lances para o jogador).
@@ -624,6 +640,108 @@
         }
         statusEl.innerHTML = `${headline} <span class="muted">${resultText(s.result)}</span><div class="muted" style="font-size:13px;font-weight:400">${escapeHtml(s.termination ?? '')}</div>`;
       }
+    }
+
+    // ------------------------------------------------------------ análise ao vivo (espectadores)
+
+    // Antitrapaça: um jogador pode abrir a partida como espectador em outra aba. Por isso, com a
+    // partida em andamento, a análise fica um lance atrás (posição depois do lance N−1) e os
+    // melhores lances mostram só o primeiro lance de cada linha, que já foi jogado ou não, nunca a continuação.
+    const LIVE_DEPTH = 16;
+    const live = {
+      bar: getPref('liveEvalBar', false),
+      cls: getPref('liveMoveClass', false),
+      best: getPref('liveBestMoves', false),
+    };
+    for (const [id, key, pref] of [['la-bar', 'bar', 'liveEvalBar'], ['la-class', 'cls', 'liveMoveClass'], ['la-best', 'best', 'liveBestMoves']]) {
+      $(id).checked = live[key];
+      $(id).onchange = (e) => { live[key] = e.target.checked; setPref(pref, live[key]); render(); };
+    }
+    let liveEngine = null;
+    let liveWanted = null;
+    const liveCache = new Map(); // FEN → análise
+
+    const liveOn = () => !seat && state.status !== 'waiting' && (live.bar || live.cls || live.best);
+    const liveTarget = () => (state.status === 'playing' ? state.moves.length - 1 : state.moves.length);
+
+    function fenAt(ply) {
+      const c = new Chess();
+      for (const m of state.moves.slice(0, ply)) c.move({ from: m.from, to: m.to, promotion: m.promotion });
+      return c.fen();
+    }
+
+    function updateLiveAnalysis() {
+      $('live-analysis').classList.toggle('hidden', !!seat);
+      if (!liveOn()) {
+        liveEngine?.terminate();
+        liveEngine = null;
+        liveWanted = null;
+        renderLiveAnalysis();
+        return;
+      }
+      const t = liveTarget();
+      const need = t < 0 ? [] : [fenAt(t), live.cls && t > 0 ? fenAt(t - 1) : null].filter((f) => f && !liveCache.has(f));
+      renderLiveAnalysis();
+      const key = need.join('|');
+      if (!need.length || key === liveWanted) return;
+      liveWanted = key;
+      liveEngine ??= new Engine();
+      liveEngine.stop(); // a posição mudou: abandona a busca anterior
+      (async () => {
+        for (const fen of need) {
+          let r;
+          try {
+            r = await analysePosition(liveEngine, fen, { depth: LIVE_DEPTH, multipv: 3 });
+          } catch (err) {
+            $('la-note').textContent = `Não foi possível analisar: ${err.message}`;
+            return;
+          }
+          if (liveWanted !== key) return;
+          if (r.depth >= LIVE_DEPTH || r.depth === 0) liveCache.set(fen, r);
+          renderLiveAnalysis();
+        }
+        if (liveWanted === key) liveWanted = null;
+      })();
+    }
+
+    function renderLiveAnalysis() {
+      const on = liveOn();
+      const t = liveTarget();
+      const r = on && t >= 0 ? liveCache.get(fenAt(t)) : null;
+      const prev = on && t > 0 ? liveCache.get(fenAt(t - 1)) : null;
+      const lang = prefs.pt ? 'pt' : 'en';
+      const label = (ply) => `${Math.ceil(ply / 2)}.${ply % 2 === 0 ? '..' : ''} ${formatSan(state.moves[ply - 1].san, lang)}`;
+
+      const barOn = on && live.bar && viewLevel() !== NOTATION_ONLY;
+      $('eval-bar').classList.toggle('hidden', !barOn);
+      if (barOn) renderEvalBar($('eval-bar'), r?.score, orientation);
+      $('live-eval').textContent = on && live.bar && r ? formatScore(r.score) : '';
+
+      const playing = state.status === 'playing';
+      $('la-note').textContent = !on
+        ? 'O Stockfish roda no seu navegador. Os jogadores não veem esta análise.'
+        : t < 0 ? 'Começa depois do primeiro lance (a análise fica um lance atrás).'
+        : playing ? `Com um lance de atraso: ${t ? `posição depois de ${label(t)}` : 'posição inicial'}.`
+        : 'Partida encerrada: posição final.';
+
+      let move = '';
+      if (on && live.cls && t > 0) {
+        if (r && prev) {
+          const rv = reviewMove(prev, r, state.moves[t - 1], (t - 1) % 2 === 0 ? 'w' : 'b');
+          const c = CLASSES[rv.cls];
+          move = `<b>${label(t)}</b> <span class="cls-${rv.cls}">${c.label}${c.symbol ? ' ' + c.symbol : ''}</span>`;
+        } else move = '<span class="muted">Analisando…</span>';
+      }
+      $('la-move').innerHTML = move;
+
+      let lines = '';
+      if (on && live.best && t >= 0) {
+        const fen = fenAt(t);
+        if (!r) lines = live.cls ? '' : '<div class="muted">Analisando…</div>';
+        else lines = r.lines.map((l) => `<div class="an-line"><span class="score">${formatScore(l.score)}</span>`
+          + `<span>${playing ? lineText(fen, l.pv, lang, 1) : lineText(fen, l.pv, lang)}</span></div>`).join('');
+      }
+      $('la-lines').innerHTML = lines;
     }
 
     const act = (type) => post('action', { type });

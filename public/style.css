@@ -414,3 +414,98 @@ tr.clickable:hover td { background: var(--panel-2); }
 .start-banner b { font-size: 22px; color: var(--accent); }
 .start-banner small { color: var(--muted); }
 @keyframes start-pop { from { transform: scale(.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ------------------------------------------------------------- análise (engine) */
+
+.board-wrap { display: flex; gap: 6px; }
+.board-wrap #board { flex: 1; min-width: 0; }
+.notation-only .eval-bar { display: none; }
+
+/* Barra de avaliação: a parte clara é a chance das brancas */
+.eval-bar {
+  position: relative;
+  flex: 0 0 22px;
+  display: flex;
+  flex-direction: column-reverse;
+  background: #403e3a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.eval-bar.flipped { flex-direction: column; }
+.eval-bar .fill { background: #f0eee9; transition: height .3s; }
+.eval-bar .label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 3px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #333;
+}
+.eval-bar.black-better .label, .eval-bar.flipped .label { top: 3px; bottom: auto; }
+.eval-bar.black-better .label { color: #eee; }
+.eval-bar.flipped.black-better .label { top: auto; bottom: 3px; }
+
+.board .arrows {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+.arrows .best { fill: rgba(21, 120, 27, .8); }
+.arrows .alt { fill: rgba(21, 120, 27, .4); }
+
+.cls-inaccuracy { color: #e6c84f; }
+.cls-mistake { color: #f0a033; }
+.cls-blunder { color: #f0605d; }
+.moves .sym { margin-left: 2px; font-weight: 700; }
+
+.analysis h3 { font-size: 16px; }
+.an-run { display: flex; gap: 8px; }
+.an-run select { flex: 1; min-width: 0; }
+.progress { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+.progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.an-progress-row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 13px; }
+.an-note { font-size: 13px; margin: 8px 0 0; }
+.an-note:empty { display: none; }
+#an-result { margin-top: 10px; }
+.an-summary th, .an-summary td { padding: 5px 6px; font-size: 13px; }
+.an-summary th:nth-child(n+2), .an-summary td:nth-child(n+2) { text-align: center; }
+.an-summary .dot, .live-analysis .dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+  border: 1px solid #000;
+}
+.eval-graph {
+  display: block;
+  width: 100%;
+  height: 80px;
+  margin: 10px 0;
+  background: #403e3a;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.eval-graph .area { fill: #f0eee9; }
+.eval-graph .mid { stroke: #888; stroke-width: 1; }
+.eval-graph .cursor { stroke: var(--accent); stroke-width: 2; }
+.eval-graph .mark { stroke-width: 1; opacity: .8; }
+.eval-graph .mark.mistake { stroke: #f0a033; }
+.eval-graph .mark.blunder { stroke: #f0605d; }
+.an-move { font-size: 14px; margin-bottom: 6px; }
+.an-move:empty { display: none; }
+.an-lines { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; font: 13px/1.4 ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+.an-line { display: flex; gap: 8px; }
+.an-line .score { flex: 0 0 52px; font-weight: 700; text-align: right; }
+.an-line span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Análise ao vivo (só espectadores) */
+.live-analysis h3 { font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.live-analysis .live-eval { margin-left: auto; font: 700 16px ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+.live-analysis .an-note { margin-top: 4px; }
+.live-analysis .an-move, .live-analysis .an-lines { margin-top: 8px; }

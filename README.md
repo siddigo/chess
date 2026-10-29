@@ -113,6 +113,20 @@ Quem abre uma partida da qual não é jogador entra como espectador e escolhe no
 
 A escolha fica salva no navegador e também pode vir no link: `/game/<id>?ver=w`, `?ver=b` ou `?ver=0` a `?ver=6`. O número de espectadores aparece na partida para todos, inclusive os jogadores. No modo local (sem Supabase) não há contagem.
 
+O espectador também pode ligar a **análise ao vivo** e escolher o que ver: barra de avaliação, classificação do lance e melhores lances. Para que um jogador não use a análise abrindo a própria partida como espectador em outra aba, enquanto a partida está em andamento ela fica **um lance atrás** (posição depois do lance N−1) e os melhores lances mostram só o primeiro lance de cada linha, nunca a continuação. Na tela dos jogadores o painel não aparece e o engine nem é carregado.
+
+## Análise com engine
+
+Na revisão de uma partida encerrada, **Analisar partida** roda o [Stockfish](https://stockfishchess.org/) no próprio navegador (WebAssembly, num Web Worker: nada passa pelo servidor), com profundidade rápida (10), normal (14) ou profunda (18). Mostra:
+
+- barra de avaliação ao lado do tabuleiro, acompanhando o lance escolhido;
+- as 3 melhores linhas da posição, com setas no tabuleiro;
+- a classificação de cada lance pela perda de chance de vitória de quem jogou: excelente, bom, imprecisão (?!), erro (?) e capivarada (??);
+- precisão média e número de imprecisões, erros e capivaradas de cada jogador;
+- gráfico de avaliação ao longo da partida (clique para ir ao lance).
+
+A análise fica salva no navegador (`localStorage`) para não recalcular. Durante a partida, a revisão não oferece análise.
+
 ## Histórico
 
 A página **Histórico** permite:
@@ -125,3 +139,5 @@ A página **Histórico** permite:
 ## Créditos
 
 Peças: conjunto *cburnett* (Colin M.L. Burnett, CC BY-SA 3.0), o mesmo do Lichess.
+
+Engine: [Stockfish](https://github.com/official-stockfish/Stockfish) 17.1, na versão WebAssembly [Stockfish.js](https://github.com/nmrugg/stockfish.js) (Nathan Rugg / Chess.com), licença **GPL v3**. O build copia o engine para `public/vendor/stockfish/` junto com a licença (`COPYING.txt`) e os autores (`AUTHORS.txt`); o código-fonte está nos repositórios citados. A curva de chance de vitória e a fórmula de precisão seguem as do Lichess.

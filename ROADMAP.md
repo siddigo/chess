@@ -50,26 +50,28 @@ Nível mais difícil: não há tabuleiro, só a lista de lances.
 Stockfish é open source (licença **GPL v3**) e tem versão compilada para **WebAssembly**, que roda no navegador do próprio usuário: sem custo de servidor. Ao distribuir o arquivo `.wasm`, é preciso incluir a licença e indicar onde está o código-fonte (basta citar nos créditos e manter os arquivos de licença junto).
 
 **2a. Análise pós-jogo**
-- [ ] Integrar o Stockfish WASM num Web Worker (protocolo UCI), sem travar a página.
-- [ ] Analisar cada posição da partida com profundidade/tempo configurável e barra de progresso.
-- [ ] **Barra de avaliação** (centipawns e mate em N) acompanhando o replay lance a lance.
-- [ ] **Melhores lances** de cada posição (top 1–3 linhas), com seta no tabuleiro.
-- [ ] **Classificação de cada lance** pela perda de avaliação: excelente, bom, imprecisão (?!), erro (?), capivarada (??).
-- [ ] Resumo por jogador: precisão média, número de imprecisões, erros e capivaradas.
-- [ ] Gráfico de avaliação ao longo da partida (clicar num ponto leva ao lance).
-- [ ] Opcional: guardar a análise no banco para não recalcular (`game_analysis`).
+- [x] Integrar o Stockfish WASM num Web Worker (protocolo UCI), sem travar a página.
+- [x] Analisar cada posição da partida com profundidade/tempo configurável e barra de progresso.
+- [x] **Barra de avaliação** (centipawns e mate em N) acompanhando o replay lance a lance.
+- [x] **Melhores lances** de cada posição (top 1–3 linhas), com seta no tabuleiro.
+- [x] **Classificação de cada lance** pela perda de avaliação: excelente, bom, imprecisão (?!), erro (?), capivarada (??).
+- [x] Resumo por jogador: precisão média, número de imprecisões, erros e capivaradas.
+- [x] Gráfico de avaliação ao longo da partida (clicar num ponto leva ao lance).
+- [ ] Opcional: guardar a análise no banco para não recalcular (`game_analysis`). Por enquanto fica no `localStorage` de quem analisou.
 
 **2b. Análise ao vivo (para espectadores)**
-- [ ] Liga/desliga no painel do espectador, com o que mostrar escolhido na hora:
+- [x] Liga/desliga no painel do espectador, com o que mostrar escolhido na hora:
   - nada;
   - só a barra de avaliação;
   - classificação do último lance (bom, imprecisão, erro...);
   - melhores lances sugeridos.
-- [ ] Preferência salva no navegador, como as outras configurações.
-- [ ] **Antitrapaça:** os jogadores da partida nunca veem a análise. Como alguém pode abrir a partida em outra aba como espectador, considerar:
+- [x] Preferência salva no navegador, como as outras configurações.
+- [x] **Antitrapaça:** os jogadores da partida nunca veem a análise. Como alguém pode abrir a partida em outra aba como espectador, considerar:
   - atraso na análise ao vivo (ex.: só mostra até o lance N−1, ou com X segundos de atraso);
   - em torneios (Etapa 9), análise ao vivo desligada ou com atraso maior;
   - o chat da plateia (Etapa 8) nunca chega aos jogadores.
+
+**Decidido:** Stockfish.js 17.1 na versão *lite single-thread* (~7 MB, roda sem os cabeçalhos COOP/COEP). A classificação usa a perda de chance de vitória de quem jogou (curva do Lichess): excelente (melhor lance ou menos de 2 pontos), bom (< 5), imprecisão (< 10), erro (< 15), capivarada (15 ou mais). A revisão só analisa partidas encerradas. Ao vivo, cada item (barra, classificação, melhores lances) é uma caixa independente; todas desligadas = nada. Com a partida em andamento, a análise fica um lance atrás (posição depois do lance N−1) e os melhores lances mostram só o primeiro lance de cada linha. Atraso maior para torneios fica para a Etapa 9.
 
 ---
 
